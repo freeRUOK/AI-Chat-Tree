@@ -1,0 +1,16 @@
+usage:
+  ollama_host: http://127.0.0.1:11434
+  chat_collection_dir: chat_collections
+models:
+- group_name: deepseek
+  is_online: true
+  show_reasoning: true
+  base_url: https://api.deepseek.com
+  api_key: my-api-key
+  sub_models:
+  - deepseek-reasoner
+  - deepseek-chat
+text_to_speech:
+  voice: Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)
+  rate: +100%
+  volume: +20%

@@ -1,0 +1,52 @@
+[tool.poetry]
+name = "chat"
+version = "0.1.0"
+description = "一个简单的cliAI聊天机器人程序"
+authors = ["'FreeRUOK' <'2651688427@qq.com'>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+typer = "^0.15.1"
+openai = "^1.61.0"
+ollama = "^0.4.7"
+pydub = "^0.25.1"
+simpleaudio = "^1.0.4"
+typing-extensions = "^4.12.2"
+pyperclip = "^1.9.0"
+prompt-toolkit = "^3.0.50"
+python-dotenv = "^1.0.1"
+edge-tts = "^7.0.0"
+pyyaml = "^6.0.2"
+chardet = "^5.2.0"
+returns = "^0.24.0"
+wxpython = "^4.2.2"
+loguru = "^0.7.3"
+
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.9.4"
+mypy = "^1.15.0"
+types-pyyaml = "^6.0.12.20241230"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[[tool.poetry.source]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+priority = "primary"
+
+
+[[tool.poetry.source]]
+name = "tencent"
+url = "https://mirrors.cloud.tencent.com/pypi/simple/"
+priority = "primary"
+
+
+[[tool.poetry.source]]
+name = "tsinghua"
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
+priority = "primary"
