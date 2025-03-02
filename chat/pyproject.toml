@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "chat"
-version = "0.1.0"
-description = "一个简单的cliAI聊天机器人程序"
+version = "0.1.1"
+description = "一个简单的gui/cliAI聊天机器人程序"
 authors = ["'FreeRUOK' <'2651688427@qq.com'>"]
 license = "MIT"
 readme = "README.md"

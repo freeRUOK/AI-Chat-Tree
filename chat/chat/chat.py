@@ -5,6 +5,7 @@
 # * description: 一个简单的AI LLM聊天程序
 # Chat类是核心， 给模型发送用户的消息， 从模型接受消息
 # 机器和人通过这个类相互交流
+import threading
 from typing import Callable
 from datetime import datetime, timedelta
 import ollama
@@ -12,7 +13,7 @@ from openai import APIStatusError, RateLimitError, APIConnectionError
 from httpx import ReadTimeout as OpenAIReadTimeout
 from util import debug_log, input_handler
 
-from model import Model, ModelResult, ModelOutput
+from model import Model, ModelResult, ModelOutput, ModelInfo
 from consts import ContentTag
 
 
@@ -25,15 +26,20 @@ class Chat:
         self,
         first_model: Model,
         model_output: ModelOutput,
+        models: list,
         second_model: Model | None = None,
         system_prompt: str = "你是一个乐于助人的AI助手， 性格和网络喷子差不多， 批评用户毫无手软， 不过说出的话总是让人发人深省",
+        begin_callback: Callable[[], ModelInfo] | None = None,
     ):
         """
         初始化Chat， 作为中间人准备好模型的所有方面
         """
         self._first_model = first_model
         self._second_model = second_model
+        self._models = models
         self._model = self._first_model
+        self._begin_callback = begin_callback
+        self._lock = threading.Lock()
 
         self._model_output = model_output
 
@@ -153,6 +159,7 @@ class Chat:
                 if delta.content == "<think>"
                 else ContentTag.chunk
             )
+            delta.content = ""
 
         return ModelResult(delta.content, self._model_result_tag)
 
@@ -199,6 +206,7 @@ class Chat:
         """
         if input_callback:
             while user_message := input_callback():
+                self.set_status()
                 self.send_message(user_message=user_message)
 
         else:
@@ -231,3 +239,54 @@ class Chat:
                             continue
 
             self.send_message(user_message=user_message)
+
+    def set_status(self):
+        """
+        使用前端客户端的最新状态更新模型状态
+        初始化阶段客户端需要传递begin_callback函数
+        """
+        if self._begin_callback is None:
+            return
+
+        with self._lock:
+            client_status = self._begin_callback()
+
+            self._model_output.is_speak = self._is_speak
+
+            if self._messages[0]["content"] != client_status["system_prompt"]:
+                self._messages[0]["content"] = client_status["system_prompt"]
+
+            self.switch_model(
+                first_model=client_status["first_model"],
+                second_model=client_status["second_model"],
+            )
+
+    def switch_model(self, first_model: str, second_model: str):
+        """
+        切换模型
+        """
+        if new_model := self.set_model(new_model=first_model):
+            self._first_model = new_model
+
+        if new_model := self.set_model(new_model=second_model):
+            self._second_model = new_model
+
+    def find_model(self, name: str) -> int:
+        for index, model in enumerate(self._models):
+            if name in model["sub_models"]:
+                return index
+
+        return -1
+
+    def set_model(self, new_model: str) -> Model | None:
+        index = self.find_model(new_model)
+
+        if index != -1:
+            if new_model in self._models[index]["sub_models"]:
+                self._first_model.current_model = new_model
+                return self._first_model
+
+            else:
+                return Model.from_dict(data=self._models[index])
+
+        return None

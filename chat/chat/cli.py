@@ -5,11 +5,13 @@
 # * description: 一个简单的AI LLM聊天程序
 # 主要实现了cli接口
 import os
+from contextlib import ExitStack
 from typing_extensions import Annotated
 import typer
 import yaml
+from config import Config
 from consts import CONFIG_PATH, default_system_prompt
-from run import run
+from application import Application
 
 # 创建typer app， 并且在创建config_app， 最后把config_app作为app的子命令
 app = typer.Typer()
@@ -26,11 +28,17 @@ def chat(
     ] = default_system_prompt,
 ):
     # 按照chat的默认方式运行
-    run(
-        model_name=model_name,
-        second_model_name=second_model_name,
-        system_prompt=system_prompt,
-    )
+    with ExitStack() as stack:
+        config = stack.enter_context(Config())
+        application = stack.enter_context(
+            Application(
+                config=config,
+                model_name=model_name,
+                second_model_name=second_model_name,
+                system_prompt=system_prompt,
+            )
+        )
+        application.run()
 
 
 @config_app.command("tts")

@@ -28,6 +28,16 @@ class ModelResult:
         self.tag = tag
 
 
+class ModelInfo:
+    """
+    表示模型的状态, 主要模型， 备用模型， 是否tts朗读， 可用模型列表
+    """
+
+    def __init__(self, tag: ContentTag, metadata: dict):
+        self.content_tag = tag
+        self.metadata = metadata
+
+
 class Model:
     """
     定义某个llm模型组
@@ -151,16 +161,16 @@ class ModelOutput:
         finish_callback: Callable[[list], None] | None = None,
     ):
         self._config = config
-        self._is_speak = is_speak
+        self.is_speak = is_speak
         self._chunk_callback = chunk_callback
         self._finish_callback = finish_callback
-        self._text_to_speech: TextToSpeech
+        self._text_to_speech: TextToSpeech | None = None
         self._tts_content = ""
         try:
             self._text_to_speech = self.build_text_to_speech()
             self._text_to_speech.start()
         except Exception as e:
-            self._is_speak = False
+            self.is_speak = False
             print(f"错误： {e}\n语音朗读功能不可用。")
             debug_log(e)
 
@@ -185,24 +195,23 @@ class ModelOutput:
         """
         结束tts线程
         """
-        if self._is_speak:
+        if self._text_to_speech:
             self._text_to_speech.stop()
 
     def build_text_to_speech(self) -> TextToSpeech:
         """
         创建TTS语音朗读引擎
         """
-        if not self._is_speak:
-            raise RuntimeError("语音朗读功能没有启用")
-
         if tts_config := self._config.get("text_to_speech"):
             return TextToSpeech(
+                auto_play=True,
                 voice=tts_config["voice"],
                 rate=tts_config["rate"],
                 volume=tts_config["volume"],
             )
         return TextToSpeech(
-            voice="Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)"
+            auto_play=True,
+            voice="Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)",
         )
 
     def output_done(self, messages: list):
@@ -252,34 +261,29 @@ class ModelOutput:
         """
         if model_result.tag == ContentTag.reasoning_content:
             if show_reasoning:
+                self._tts_content += model_result.content
                 if self._chunk_callback:
                     self._chunk_callback(model_result)
                 else:
                     print(model_result.content, end="", flush=True)
 
-                self.speak(chunk=model_result.content, finish_reason=finish_reason)
         else:
+            self._tts_content += model_result.content
             if self._chunk_callback:
                 self._chunk_callback(model_result)
             else:
                 print(model_result.content, end="", flush=True)
 
-            self.speak(chunk=model_result.content, finish_reason=finish_reason)
-
         if finish_reason == "stop":
             print()
 
-    def speak(self, chunk: str, finish_reason: str):
+        self.speak(is_last=finish_reason == "stop")
+
+    def speak(self, is_last: bool = False):
         """
         如果可用, 语音朗读llm内容
         """
-        if not self._is_speak:
-            return
-
-        if self._text_to_speech:
-            # 目前来说这是笨办法或者叫懒办法
-            self._tts_content += chunk
-            if self._tts_content[-1:] == "\n" or finish_reason == "stop":
-                text=self._tts_content
+        if self.is_speak and self._text_to_speech:
+            if self._tts_content[-1:] == "\n" or is_last:
+                self._text_to_speech.submit(text=self._tts_content)
                 self._tts_content = ""
-                self._text_to_speech.submit(text=text)
