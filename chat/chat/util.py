@@ -26,6 +26,7 @@ logger.add(
     diagnose=True,
     enqueue=True,
 )
+debug_logger = logger
 DEBUG_MODE = os.getenv("DEBUG_MODE", None)
 
 

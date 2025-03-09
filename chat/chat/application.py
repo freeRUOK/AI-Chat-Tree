@@ -5,6 +5,7 @@
 # * description: 一个简单的AI LLM聊天程序
 # 抽象了一个层简化底层组件的调用
 # 简单 灵活 复杂 这都是平衡妥协的产物
+from io import BytesIO
 from typing import Callable
 import threading
 import ollama
@@ -30,6 +31,7 @@ class Application(threading.Thread):
         begin_callback: Callable[[], dict] | None = None,
         input_callback: Callable[[], str] | None = None,
         chunk_callback: Callable[[ModelResult], None] | None = None,
+        audio_callback: Callable[[BytesIO], None] | None = None,
         finish_callback: Callable[[list], None] | None = None,
     ):
         """
@@ -44,6 +46,7 @@ class Application(threading.Thread):
         self._begin_callback = begin_callback
         self._input_callback = input_callback
         self._chunk_callback = chunk_callback
+        self._audio_callback = audio_callback
         self._finish_callback = finish_callback
         self._lock = threading.Lock()
 
@@ -140,6 +143,7 @@ class Application(threading.Thread):
                 config=self._config,
                 is_speak=self._is_speak,
                 chunk_callback=self._chunk_callback,
+                audio_callback=self._audio_callback,
                 finish_callback=self._finish_callback,
             ) as model_output:
                 self._begin(
@@ -153,8 +157,8 @@ class Application(threading.Thread):
 
                 self._chat.run(input_callback=self._input_callback)
         except Exception as e:
+            debug_log(e)
             if DEBUG_MODE:
-                debug_log(e)
                 raise e
             else:
                 print(f"错误： {e}")

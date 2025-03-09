@@ -8,29 +8,14 @@
 # 这样可以在内容之间快速跳转
 from contextlib import ExitStack
 from typing import Any
-from queue import Queue
 import wx  # type: ignore
 from model import ModelResult
 from config import Config
 from application import Application
-from consts import ContentTag, default_system_prompt
+from consts import ContentTag
 from util import clear_queue
 from gui_consts import MENU_ITEM_SET_FIRST_MODEL, MENU_ITEM_SET_SECOND_MODEL
-
-
-class FrameStatus:
-    """
-    单独管理和主窗口相关联的一些状态数据
-    """
-
-    def __init__(self):
-        self.models: list | None = None
-        self.first_model = ""
-        self.second_model = ""
-        self.is_speak = True
-        self.message_queue: Queue = Queue()
-        self.line = ""
-        self.system_prompt = default_system_prompt
+from data_status import DataStatus as FrameStatus
 
 
 class MainFrame(wx.Frame):
@@ -256,13 +241,16 @@ class MainFrame(wx.Frame):
         """
         三大接口之一， 这里没有用到messages参数
         """
+        self.change_Enable(True)
+        if not messages:
+            return
+
         # 创建新的消息节点， 在每个消息节点包含了 用户消息 AI推理和AI回应三个节点的内容
         self.current_message_node = self.tree.AppendItem(self.root, "Message:")
         self.tree.Expand(self.current_content_node)
         self.tree.SelectItem(self.current_content_node)
         # 发送完成信号
         self.on_chunk(ModelResult("\n", ContentTag.chunk))
-        self.change_Enable(True)
 
     def add_message_to_tree(self, model_result: ModelResult):
         """
@@ -287,7 +275,7 @@ if __name__ == "__main__":
         application = stack.enter_context(
             Application(
                 config=config,
-                model_name="deepseek-reasoner",
+                model_name="deepseek-r1:14b",
                 second_model_name="deepseek-chat",
                 begin_callback=frame.on_begin,
                 input_callback=frame.status.message_queue.get,

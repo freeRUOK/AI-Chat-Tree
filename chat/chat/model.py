@@ -6,6 +6,7 @@
 # 定义了关于模型
 # Model表示一个模型组， 这些模型组有一些共同的属性, 有若干子模型
 # 比如deepseek的调用URL， 密钥都是相同的， 只是提供了两个子模型 deepseek-chat 普通的v3， 和deepseek-reasoner 具有深度思考的r1模型
+from io import BytesIO
 from typing import Any, Callable
 from datetime import datetime
 from pathlib import Path
@@ -91,7 +92,7 @@ class Model:
         self._ollamaClient: ollama.Client
         if self.is_online:
             self._openAIClient = OpenAI(
-                base_url=self.base_url, api_key=self.api_key, timeout=8
+                base_url=self.base_url, api_key=self.api_key, timeout=16
             )
         else:
             self._ollamaClient = ollama.Client(host=self.base_url)
@@ -158,11 +159,13 @@ class ModelOutput:
         config: Config,
         is_speak: bool = True,
         chunk_callback: Callable[[ModelResult], None] | None = None,
+        audio_callback: Callable[[BytesIO], None] | None = None,
         finish_callback: Callable[[list], None] | None = None,
     ):
         self._config = config
         self.is_speak = is_speak
         self._chunk_callback = chunk_callback
+        self._audio_callback = audio_callback
         self._finish_callback = finish_callback
         self._text_to_speech: TextToSpeech | None = None
         self._tts_content = ""
@@ -204,13 +207,15 @@ class ModelOutput:
         """
         if tts_config := self._config.get("text_to_speech"):
             return TextToSpeech(
-                auto_play=True,
+                auto_play=self.is_speak,
+                process_callback=self._audio_callback,
                 voice=tts_config["voice"],
                 rate=tts_config["rate"],
                 volume=tts_config["volume"],
             )
         return TextToSpeech(
-            auto_play=True,
+            auto_play=self.is_speak,
+            process_callback=self._audio_callback,
             voice="Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)",
         )
 
@@ -230,6 +235,7 @@ class ModelOutput:
         file_content = "\n\n".join(
             f"{it['role']}: {it['content']}" for it in messages[-2:]
         )
+
         self._total_char_length += len(file_content)
         if self._total_char_length >= self._max_total_char_length:
             self.trim(messages=messages)
@@ -283,7 +289,8 @@ class ModelOutput:
         """
         如果可用, 语音朗读llm内容
         """
-        if self.is_speak and self._text_to_speech:
+
+        if self._text_to_speech:
             if self._tts_content[-1:] == "\n" or is_last:
                 self._text_to_speech.submit(text=self._tts_content)
                 self._tts_content = ""

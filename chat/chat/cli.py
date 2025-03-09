@@ -12,6 +12,8 @@ import yaml
 from config import Config
 from consts import CONFIG_PATH, default_system_prompt
 from application import Application
+from ws_serve import WSServe
+from util import DEBUG_MODE, debug_log
 
 # 创建typer app， 并且在创建config_app， 最后把config_app作为app的子命令
 app = typer.Typer()
@@ -92,3 +94,16 @@ def config_init(
         yaml.dump(
             config, fp, allow_unicode=True, default_flow_style=False, sort_keys=False
         )
+
+
+@app.command()
+def serve(port: Annotated[int, typer.Argument()] = 8001):
+    try:
+        with WSServe() as ws_serve:
+            ws_serve.run(port=port)
+    except Exception as e:
+        debug_log(e)
+        if DEBUG_MODE:
+            raise e
+        else:
+            print(f"错误： {e}")

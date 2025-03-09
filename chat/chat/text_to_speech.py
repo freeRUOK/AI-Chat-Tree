@@ -27,7 +27,7 @@ class TextToSpeech(threading.Thread):
         voice: str = "Microsoft Server Speech Text to Speech Voice (zh-CN, YunjianNeural)",
         rate: str = "+100%",
         volume: str = "+0%",
-        process_callback: Callable[[AudioSegment], None] | None = None,
+        process_callback: Callable[[BytesIO], None] | None = None,
     ):
         super().__init__()
         self.daemon = True
@@ -76,19 +76,17 @@ class TextToSpeech(threading.Thread):
         """
         处理音频， 自动播放或者让process_callback处理
         """
-        while audio_segment := audioQueue.get():
+        while audio_buffer := audioQueue.get():
             if self.auto_play:
+                audio_segment = AudioSegment.from_mp3(audio_buffer)
                 self.playAudioSegment(audio_segment=audio_segment)
-            elif self._process_callback:
-                self._process_callback(audio_segment)
-            else:
-                raise RuntimeWarning(
-                    "TTS转换后的结果没有处理, 应当设置auto_play=True或者传递process_callback函数"
-                )
+            if self._process_callback:
+                audio_buffer.seek(0)
+                self._process_callback(audio_buffer)
 
         clear_queue(audioQueue)
 
-    async def _convert_async(self, text: str) -> AudioSegment | None:
+    async def _convert_async(self, text: str) -> BytesIO | None:
         """
         把文本内容转换到mp3AudioSegment
         """
@@ -103,16 +101,13 @@ class TextToSpeech(threading.Thread):
                     buffer.write(chunk["data"])
 
             buffer.seek(0)
-
-            audio = AudioSegment.from_mp3(buffer)
-
-            return audio
+            return buffer
         except Exception as e:
             raise e
 
             return None
 
-    def convert(self, text: str) -> AudioSegment | None:
+    def convert(self, text: str) -> BytesIO | None:
         """
         对文本到语音函数的包装
         """
@@ -127,7 +122,7 @@ class TextToSpeech(threading.Thread):
         """
         run函数， 启动播放任务， 监听文本内容提交
         """
-        audioQueue = Queue()
+        audioQueue: Queue = Queue()
         threading.Thread(
             target=self.process,
             args=[
@@ -136,8 +131,8 @@ class TextToSpeech(threading.Thread):
         ).start()
         try:
             while text := self._textQueue.get():
-                if audio_segment := self.convert(text):
-                    audioQueue.put(audio_segment)
+                if audio_buffer := self.convert(text):
+                    audioQueue.put(audio_buffer)
 
         except Exception as e:
             print(f"tts Thread出现错误： {e}")

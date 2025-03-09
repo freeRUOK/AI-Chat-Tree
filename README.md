@@ -2,9 +2,10 @@
 简单AI聊天程序， 支持在线OpenAI和本地ollama调用， 聊天内容在Tree Ctrl上展示
 
 ## 介绍
-目前支持命令行和gui（不完善不稳定）模式运行， 接下来打算添加web前端和服务端， 从而实现非本机远程调用的目的。  
+    一个LLM聊天助手， 支持cli, gui和web界面…… 
 gui部分使用树状图展示聊天列表， 从而在各个部分之间灵活跳转。
-配置功能不完善， 请手动编辑， 注意不能违反yml格式文件的语法。 
+web前端使用vue+socket.io实现， 目前不完善。 
+此外配置功能不完善， 请手动编辑， 注意不能违反yml格式文件的语法。 
 支持语音朗读功能， 需要ffmpeg工具。
 
 ## 构建和运行
@@ -22,7 +23,20 @@ set DEBUG_MODE=1 # 启用调试模式
 python chat chat # cli
 python chat\gui.py # gui
 pythonw chat\gui.py # 无控制台
+python chat serve # 启动web服务， 默认在8001端口运行
 ```
+
+## 构建web前端
+
+  进入项目根目录的web-chat文件夹之后：
+  ```
+npm install
+npm start # 调试预览
+npm run all # 打包前端页面
+  ```
+
+成功打包之后可以把 `web-chat/dist`文件夹移动到项目根目录之下的`chat/`文件夹， 
+并且重命名为`static`， 这样就可以使用python flask静态文件服务了。 
 
 ## 关于配置API-KEY
 

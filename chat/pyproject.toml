@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "chat"
-version = "0.1.1"
-description = "一个简单的gui/cliAI聊天机器人程序"
+version = "0.1.0"
+description = "一个简单的cli gui和webAI聊天机器人程序"
 authors = ["'FreeRUOK' <'2651688427@qq.com'>"]
 license = "MIT"
 readme = "README.md"
@@ -16,19 +16,20 @@ simpleaudio = "^1.0.4"
 typing-extensions = "^4.12.2"
 pyperclip = "^1.9.0"
 prompt-toolkit = "^3.0.50"
-python-dotenv = "^1.0.1"
 edge-tts = "^7.0.0"
 pyyaml = "^6.0.2"
 chardet = "^5.2.0"
-returns = "^0.24.0"
 wxpython = "^4.2.2"
 loguru = "^0.7.3"
+flask = "^3.1.0"
+flask-socketio = "^5.5.1"
 
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.4"
 mypy = "^1.15.0"
 types-pyyaml = "^6.0.12.20241230"
+types-flask-socketio = "^5.5.0.20241227"
 
 [build-system]
 requires = ["poetry-core"]
@@ -50,3 +51,6 @@ priority = "primary"
 name = "tsinghua"
 url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"
 priority = "primary"
+
+[tool.mypy]
+check_untyped_defs = true

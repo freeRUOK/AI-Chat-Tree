@@ -6,6 +6,7 @@
 # Chat类是核心， 给模型发送用户的消息， 从模型接受消息
 # 机器和人通过这个类相互交流
 import threading
+from copy import deepcopy
 from typing import Callable
 from datetime import datetime, timedelta
 import ollama
@@ -92,7 +93,8 @@ class Chat:
     def _error_handler(self, err: Exception, call_count: int) -> bool:
         """
         处理发送聊天信息期间的错误
-        返回True暂时故障， 返回False需要更多错误检查
+        返回True暂时故障，
+        返回False不可恢复错误， 可能是程序bug或者配置错误
         """
 
         err_code = -1
@@ -108,10 +110,11 @@ class Chat:
         else:
             print(f"错误： {err}")
 
-        if err_code >= 500 and call_count <= 1:
+        if err_code >= 500 and call_count < 3:
             return True
 
         self._messages.pop(-1)
+        self._model_output.output_done([])
 
         return False
 
@@ -127,11 +130,15 @@ class Chat:
             finish_reason = chunk.done_reason
 
         model_result = self._delta_handler(delta=delta)
+
         self._model_output.output_chunk(
-            model_result=model_result,
+            model_result=deepcopy(
+                model_result
+            ),  #  防止在其他地方意外修改， 这里直接拷贝， 在这里我实际吃过亏
             show_reasoning=self._model.show_reasoning,
             finish_reason=finish_reason,
         )
+
         if model_result.tag == ContentTag.reasoning_content:
             self._reasoning_content += model_result.content
         else:
@@ -251,14 +258,15 @@ class Chat:
         with self._lock:
             client_status = self._begin_callback()
 
-            self._model_output.is_speak = self._is_speak
+            self._model_output.is_speak = client_status.metadata["is_speak"]
 
-            if self._messages[0]["content"] != client_status["system_prompt"]:
-                self._messages[0]["content"] = client_status["system_prompt"]
+            new_system_prompt = client_status.metadata["system_prompt"]
+            if self._messages[0]["content"] != new_system_prompt:
+                self._messages[0]["content"] = new_system_prompt
 
             self.switch_model(
-                first_model=client_status["first_model"],
-                second_model=client_status["second_model"],
+                first_model=client_status.metadata["first_model"],
+                second_model=client_status.metadata["second_model"],
             )
 
     def switch_model(self, first_model: str, second_model: str):
