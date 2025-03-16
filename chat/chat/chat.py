@@ -166,7 +166,6 @@ class Chat:
                 if delta.content == "<think>"
                 else ContentTag.chunk
             )
-            delta.content = ""
 
         return ModelResult(delta.content, self._model_result_tag)
 
@@ -258,7 +257,9 @@ class Chat:
         with self._lock:
             client_status = self._begin_callback()
 
-            self._model_output.is_speak = client_status.metadata["is_speak"]
+            self._model_output._text_to_speech_option = client_status.metadata[
+                "text_to_speech_option"
+            ]
 
             new_system_prompt = client_status.metadata["system_prompt"]
             if self._messages[0]["content"] != new_system_prompt:

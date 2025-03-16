@@ -14,6 +14,7 @@ from consts import CONFIG_PATH, default_system_prompt
 from application import Application
 from ws_serve import WSServe
 from util import DEBUG_MODE, debug_log
+from text_to_speech import TextToSpeechOption
 
 # 创建typer app， 并且在创建config_app， 最后把config_app作为app的子命令
 app = typer.Typer()
@@ -38,6 +39,7 @@ def chat(
                 model_name=model_name,
                 second_model_name=second_model_name,
                 system_prompt=system_prompt,
+                text_to_speech_option=TextToSpeechOption.play,
             )
         )
         application.run()

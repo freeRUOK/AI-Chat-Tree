@@ -9,7 +9,6 @@
 from io import BytesIO
 from contextlib import ExitStack
 import os
-from datetime import datetime
 from flask import Flask, send_from_directory
 from flask_socketio import SocketIO
 from data_status import DataStatus as ServeStatus
@@ -18,6 +17,7 @@ from consts import ContentTag
 from application import Application
 from model import ModelResult
 from util import debug_logger
+from text_to_speech import TextToSpeechOption
 
 
 class WSServe:
@@ -95,9 +95,15 @@ class WSServe:
         """
         每次模型输出消息块的时候调用
         """
+        if self.serve_status.current_content_tag != model_result.tag:
+            self.serve_status.current_content_tag = model_result.tag
+            model_result.content = f"\n{model_result.content}"
+
         self.serve_status.line += model_result.content
         if self.serve_status.line[-1:] == "\n" or model_result.tag == ContentTag.end:
-            self.sio.emit("chat", {"text": self.serve_status.line})
+            self.sio.emit(
+                "chat", {"text": self.serve_status.line, "tag": model_result.tag.value}
+            )
             self.serve_status.line = ""
 
     def output_audio(self, audio_buffer: BytesIO):
@@ -121,9 +127,9 @@ class WSServe:
             application = stack.enter_context(
                 Application(
                     config=config,
-                    model_name="deepseek-reasoner",
+                    model_name="qwq:latest",
                     second_model_name="qwq",
-                    is_speak=False,
+                    text_to_speech_option=TextToSpeechOption.byte_io,
                     input_callback=self.serve_status.message_queue.get,
                     chunk_callback=self.output_chunk,
                     audio_callback=self.output_audio,

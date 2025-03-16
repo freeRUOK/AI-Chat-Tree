@@ -14,7 +14,7 @@ import ollama
 from openai import OpenAI
 from consts import ContentTag
 from util import validate_values, debug_log
-from text_to_speech import TextToSpeech
+from text_to_speech import TextToSpeech, TextToSpeechOption
 from config import Config
 
 
@@ -157,25 +157,19 @@ class ModelOutput:
     def __init__(
         self,
         config: Config,
-        is_speak: bool = True,
+        text_to_speech_option: TextToSpeechOption = TextToSpeechOption.play,
         chunk_callback: Callable[[ModelResult], None] | None = None,
         audio_callback: Callable[[BytesIO], None] | None = None,
         finish_callback: Callable[[list], None] | None = None,
     ):
         self._config = config
-        self.is_speak = is_speak
+        self._text_to_speech_option = text_to_speech_option
         self._chunk_callback = chunk_callback
         self._audio_callback = audio_callback
         self._finish_callback = finish_callback
         self._text_to_speech: TextToSpeech | None = None
+        self.start_text_to_speech()
         self._tts_content = ""
-        try:
-            self._text_to_speech = self.build_text_to_speech()
-            self._text_to_speech.start()
-        except Exception as e:
-            self.is_speak = False
-            print(f"错误： {e}\n语音朗读功能不可用。")
-            debug_log(e)
 
         # 这里简单计算字符数量
         # 更精细的计算是以后工作的目标了
@@ -192,32 +186,49 @@ class ModelOutput:
         """
         with语句自动管理
         """
-        self.stop()
+        self.stop_text_to_speech()
 
-    def stop(self):
+    def stop_text_to_speech(self):
         """
         结束tts线程
         """
         if self._text_to_speech:
             self._text_to_speech.stop()
 
-    def build_text_to_speech(self) -> TextToSpeech:
+    def start_text_to_speech(self):
         """
-        创建TTS语音朗读引擎
+        运行TTS语音朗读引擎
+        如果没有创建或没有运行则重新创建
         """
-        if tts_config := self._config.get("text_to_speech"):
-            return TextToSpeech(
-                auto_play=self.is_speak,
+        if (
+            self._text_to_speech_option == TextToSpeechOption.off
+            or self._text_to_speech is not None
+            and self._text_to_speech.is_alive()
+        ):
+            return
+
+        self.stop_text_to_speech()
+
+        tts_config = self._config.get("text_to_speech")
+        if tts_config is None:
+            tts_config = {
+                "voice": "Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)",
+                "rate": "+80%",
+                "volume": "+20%",
+            }
+        try:
+            self._text_to_speech = TextToSpeech(
+                option=self._text_to_speech_option,
                 process_callback=self._audio_callback,
                 voice=tts_config["voice"],
                 rate=tts_config["rate"],
                 volume=tts_config["volume"],
             )
-        return TextToSpeech(
-            auto_play=self.is_speak,
-            process_callback=self._audio_callback,
-            voice="Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)",
-        )
+            self._text_to_speech.start()
+        except Exception as e:
+            self._text_to_speech_option = TextToSpeechOption.off
+            debug_log(e)
+            return None
 
     def output_done(self, messages: list):
         """
@@ -292,5 +303,6 @@ class ModelOutput:
 
         if self._text_to_speech:
             if self._tts_content[-1:] == "\n" or is_last:
+                self.start_text_to_speech()
                 self._text_to_speech.submit(text=self._tts_content)
                 self._tts_content = ""

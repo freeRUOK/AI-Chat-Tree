@@ -6,6 +6,8 @@
 # 单独分离UI相关的一些数据
 from queue import Queue
 from consts import default_system_prompt
+from text_to_speech import TextToSpeechOption
+from consts import ContentTag
 
 
 class DataStatus:
@@ -17,7 +19,8 @@ class DataStatus:
         self.models: list | None = None
         self.first_model = ""
         self.second_model = ""
-        self.is_speak = True
+        self.text_to_speech_option = TextToSpeechOption.play
         self.message_queue: Queue = Queue()
         self.line = ""
+        self.current_content_tag = ContentTag.reasoning_content
         self.system_prompt = default_system_prompt

@@ -5,6 +5,7 @@
 # * description: 一个简单的AI LLM聊天程序
 # 实现了TTS功能， 首先通过edge_tts生成音频随后排队播放
 from typing import Callable
+from enum import Enum
 from io import BytesIO
 import asyncio
 import threading
@@ -16,6 +17,17 @@ from aiohttp.client_exceptions import WSServerHandshakeError as EdgeTTSServerErr
 from util import clear_queue, debug_log
 
 
+class TextToSpeechOption(str, Enum):
+    """
+    标记如何处理生成的音频流
+    """
+
+    off = "off"  # 完全关闭， 客户端不应该创建TextToSpeech实例
+    play = "play"  # 自动播放
+    byte_io = "byte_io"  # 作为ByteIO数据流让audio_callback处理
+    all = "all"  # 自动播放和后续处理
+
+
 class TextToSpeech(threading.Thread):
     """
     使用edge-tts实现一个TTS功能
@@ -23,7 +35,7 @@ class TextToSpeech(threading.Thread):
 
     def __init__(
         self,
-        auto_play: bool,
+        option: TextToSpeechOption = TextToSpeechOption.play,
         voice: str = "Microsoft Server Speech Text to Speech Voice (zh-CN, YunjianNeural)",
         rate: str = "+100%",
         volume: str = "+0%",
@@ -31,7 +43,7 @@ class TextToSpeech(threading.Thread):
     ):
         super().__init__()
         self.daemon = True
-        self.auto_play = auto_play
+        self.option = option
         self._voice = voice
         self._rate = rate
         self._volume = volume
@@ -52,7 +64,7 @@ class TextToSpeech(threading.Thread):
         """
         self._textQueue.put(None)
         self.join()
-        print("所有线程都正确结束。")
+        print("Text To Thread Stop.")
 
     def playAudioSegment(self, audio_segment: AudioSegment):
         """
@@ -77,10 +89,10 @@ class TextToSpeech(threading.Thread):
         处理音频， 自动播放或者让process_callback处理
         """
         while audio_buffer := audioQueue.get():
-            if self.auto_play:
+            if self.option != TextToSpeechOption.byte_io:
                 audio_segment = AudioSegment.from_mp3(audio_buffer)
                 self.playAudioSegment(audio_segment=audio_segment)
-            if self._process_callback:
+            if self._process_callback and self.option != TextToSpeechOption.play:
                 audio_buffer.seek(0)
                 self._process_callback(audio_buffer)
 

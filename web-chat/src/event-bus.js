@@ -1,4 +1,8 @@
-// eventBus.js
+// filename: eventBus.js
+// Author: FreeRUOK <2651688427@qq.com>
+// Date: 2025-03
+// Description: AI-Chat-Tree的web前端
+// 定义一个全局通讯BUS
 import { ref } from "vue";
 
 const message = ref("");

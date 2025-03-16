@@ -14,6 +14,7 @@ from consts import default_system_prompt, ContentTag
 from chat import Chat
 from model import ModelOutput, Model, ModelResult, ModelInfo
 from util import debug_log, DEBUG_MODE
+from text_to_speech import TextToSpeechOption
 
 
 class Application(threading.Thread):
@@ -27,7 +28,7 @@ class Application(threading.Thread):
         model_name: str = "deepseek-reasoner",
         second_model_name: str = "deepseek-r1:14b",
         system_prompt: str = default_system_prompt,
-        is_speak: bool = True,
+        text_to_speech_option: TextToSpeechOption = TextToSpeechOption.off,
         begin_callback: Callable[[], dict] | None = None,
         input_callback: Callable[[], str] | None = None,
         chunk_callback: Callable[[ModelResult], None] | None = None,
@@ -42,7 +43,7 @@ class Application(threading.Thread):
         self._model_name = model_name
         self._second_model_name = second_model_name
         self._system_prompt = system_prompt
-        self._is_speak = is_speak
+        self._text_to_speech_option = text_to_speech_option
         self._begin_callback = begin_callback
         self._input_callback = input_callback
         self._chunk_callback = chunk_callback
@@ -81,7 +82,7 @@ class Application(threading.Thread):
                         metadata={
                             "first_model": self._model_name,
                             "second_model": self._second_model_name,
-                            "is_speak": self._is_speak,
+                            "text_to_speech_option": self._text_to_speech_option,
                         },
                     )
                 case ContentTag.all_model:
@@ -99,7 +100,7 @@ class Application(threading.Thread):
                             "models": sub_models,
                             "first_model": self._model_name,
                             "second_model": self._second_model_name,
-                            "is_speak": self._is_speak,
+                            "text_to_speech_option": self._text_to_speech_option,
                         },
                     )
                 case _:
@@ -141,7 +142,7 @@ class Application(threading.Thread):
         try:
             with ModelOutput(
                 config=self._config,
-                is_speak=self._is_speak,
+                text_to_speech_option=self._text_to_speech_option,
                 chunk_callback=self._chunk_callback,
                 audio_callback=self._audio_callback,
                 finish_callback=self._finish_callback,

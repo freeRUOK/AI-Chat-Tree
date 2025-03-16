@@ -16,6 +16,7 @@ from consts import ContentTag
 from util import clear_queue
 from gui_consts import MENU_ITEM_SET_FIRST_MODEL, MENU_ITEM_SET_SECOND_MODEL
 from data_status import DataStatus as FrameStatus
+from text_to_speech import TextToSpeechOption
 
 
 class MainFrame(wx.Frame):
@@ -107,7 +108,7 @@ class MainFrame(wx.Frame):
         return {
             "first_model_name": self.status.first_model,
             "second_model_name": self.status.second_model,
-            "auto_tts": self.status.is_speak,
+            "text_to_speech_option": self.status.text_to_speech_option,
             "system_prompt": self.status.system_prompt,
         }
 
@@ -122,8 +123,10 @@ class MainFrame(wx.Frame):
         self.status.models = model_info.metadata["models"]
         self.status.first_model = model_info.metadata["first_model"]
         self.status.second_model = model_info.metadata["second_model"]
-        self.status.is_speak = model_info.metadata["is_speak"]
-        self.tts_checkbox.SetValue(self.status.is_speak)
+        self.status.text_to_speech_option = model_info.metadata["text_to_speech_option"]
+        self.tts_checkbox.SetValue(
+            self.status.text_to_speech_option != TextToSpeechOption.off
+        )
 
         self.set_model_list_box()
 
@@ -225,17 +228,17 @@ class MainFrame(wx.Frame):
          run函数传递到最后的chat.Chat类
          另外两个接口也一样
         """
-        if model_result.content in ["<think>", "</think>"]:
-            model_result.content = "\n"
+        if self.status.current_content_tag != model_result.tag:
+            self.status.current_content_tag = model_result.tag
+            model_result.content = f"\n{model_result.content}"
 
         self.status.line += model_result.content
-        if len(model_result.content) > 0 and model_result.content[-1] == "\n":
-            self.status.line = self.status.line.strip()
-            if self.status.line:
-                model_result.content = self.status.line
-                self.status.line = ""
-                # 线程安全的方式把后台数据更新到前台UI
-                wx.CallAfter(self.add_message_to_tree, model_result)
+        if self.status.line[-1:] == "\n" or model_result.tag == ContentTag.end:
+            content = self.status.line.strip()
+            if content:
+                wx.CallAfter(self.add_message_to_tree, content)
+
+            self.status.line = ""
 
     def on_finish(self, messages: list):
         """
@@ -250,19 +253,19 @@ class MainFrame(wx.Frame):
         self.tree.Expand(self.current_content_node)
         self.tree.SelectItem(self.current_content_node)
         # 发送完成信号
-        self.on_chunk(ModelResult("\n", ContentTag.chunk))
+        self.on_chunk(ModelResult("", ContentTag.end))
 
-    def add_message_to_tree(self, model_result: ModelResult):
+    def add_message_to_tree(self, line: str):
         """
         最后在这个方法里更新UI内容
         """
-        if model_result.tag == ContentTag.reasoning_content:
+        if self.status.current_content_tag == ContentTag.reasoning_content:
             child_node = self.tree.AppendItem(self.current_reasoning_node, "reasoning:")
 
         else:
             child_node = self.tree.AppendItem(self.current_content_node, "AI助手：")
 
-        self.tree.SetItemText(child_node, f"{model_result.content}")
+        self.tree.SetItemText(child_node, line)
 
 
 if __name__ == "__main__":
@@ -277,6 +280,7 @@ if __name__ == "__main__":
                 config=config,
                 model_name="deepseek-r1:14b",
                 second_model_name="deepseek-chat",
+                text_to_speech_option=TextToSpeechOption.play,
                 begin_callback=frame.on_begin,
                 input_callback=frame.status.message_queue.get,
                 chunk_callback=frame.on_chunk,

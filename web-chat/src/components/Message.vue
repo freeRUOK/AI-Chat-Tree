@@ -33,13 +33,20 @@ const initClipboard = () => {
 // 给所有class: copy-all或copy-code按钮添加拷贝功能
 watch(
   () => props.message?.body,
-  (newBody) => {
-    if (newBody) {
-      messageRef.value?.focus();
-    }
+  () => {
     initClipboard();
   },
 );
+
+watch(
+  () => props.message?.isDone,
+  (isDone) => {
+    if (isDone) {
+      messageRef.value?.focus();
+    }
+  },
+);
+
 onMounted(initClipboard);
 </script>
 <template>
@@ -48,4 +55,5 @@ onMounted(initClipboard);
     <div v-html="message.body"></div>
     <button v-show="message.body !== ''" class="copy-all">Copy All</button>
   </div>
+  <div v-if="message.body == ''">正在生成内容……</div>
 </template>

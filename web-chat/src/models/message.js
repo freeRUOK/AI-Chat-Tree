@@ -7,8 +7,8 @@ export default class Message {
   /**
    * 表示一条消息
    */
-  constructor(title, body, tag = "text") {
-    this.inner = { title, body, tag };
+  constructor(title, body, tag = "text", isDone = false) {
+    this.inner = { title, body, tag, isDone };
   }
   set title(value) {
     this.inner.title = value;
@@ -23,8 +23,9 @@ export default class Message {
   get body() {
     return this.inner.body;
   }
-  appendBody(part) {
+  appendBody(part, isDone) {
     this.inner.body += part;
+    this.isDone = isDone;
   }
 
   set tag(value) {
@@ -34,7 +35,14 @@ export default class Message {
     return this.inner.tag;
   }
 
+  set isDone(value) {
+    this.inner.isDone = value;
+  }
+  get isDone() {
+    return this.inner.isDone;
+  }
+
   toString() {
-    return `title: ${this.inner.title}\nbody: ${this.inner.body}\ntag: ${this.inner.tag}\n`;
+    return `title: ${this.inner.title}\nbody: ${this.inner.body}\ntag: ${this.inner.tag}\nisDone: ${this.isDone}`;
   }
 }
