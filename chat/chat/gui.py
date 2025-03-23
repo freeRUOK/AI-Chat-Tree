@@ -7,13 +7,21 @@
 # 消息列表使用树状图来呈现
 # 这样可以在内容之间快速跳转
 from contextlib import ExitStack
-from typing import Any
+import threading
 import wx  # type: ignore
+import wx.media  # type: ignore
+import pyperclip  # type: ignore
 from model import ModelResult
 from config import Config
 from application import Application
 from consts import ContentTag
-from util import clear_queue
+from sound_player import PlayMode, SoundPlayer
+from util import (
+    clear_queue,
+    capture_foreground_window,
+    capture_full_screen,
+    image_to_base64,
+)
 from gui_consts import MENU_ITEM_SET_FIRST_MODEL, MENU_ITEM_SET_SECOND_MODEL
 from data_status import DataStatus as FrameStatus
 from text_to_speech import TextToSpeechOption
@@ -25,19 +33,20 @@ class MainFrame(wx.Frame):
     """
 
     def __init__(self):
-        super().__init__(parent=None, title="AI Chat Tree", size=(800, 600))
+        super().__init__(parent=None, title="AI Chat Tree", size=(1200, 900))
 
         self.status = FrameStatus()
+
         self.panel = wx.Panel(self)
 
         self.system_prompt_label = wx.StaticText(
             self.panel,
-            label="系统提示词（AI遵循的最高指令， 可以按照自己的喜好随意修改）：",
+            label="系统提示词（AI遵循的最高指令，可以按照自己的喜好随意修改）：",
         )
         self.system_prompt_ctrl = wx.TextCtrl(
             self.panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER
         )
-        self.system_prompt_ctrl.SetMinSize((700, 100))
+        self.system_prompt_ctrl.SetMinSize((700, 100))  # 保持最小尺寸
         self.system_prompt_ctrl.Bind(wx.EVT_KILL_FOCUS, self.on_system_prompt_change)
 
         self.system_prompt_ctrl.SetValue(self.status.system_prompt)
@@ -47,12 +56,13 @@ class MainFrame(wx.Frame):
         self.model_list_box.Bind(wx.EVT_KEY_DOWN, self.on_model_list_box_keydown)
 
         self.tts_checkbox = wx.CheckBox(self.panel, label="自动大声朗读(\t&U)")
+        self.tts_checkbox.Bind(wx.EVT_CHECKBOX, self.on_tts_switch_check)
 
         self.input_label = wx.StaticText(self.panel, label="消息：")
         self.input_ctrl = wx.TextCtrl(
             self.panel, style=wx.TE_MULTILINE | wx.TE_PROCESS_ENTER
         )
-        self.input_ctrl.SetMinSize((700, 100))
+        self.input_ctrl.SetMinSize((700, 100))  # 保持最小尺寸
 
         self.send_button = wx.Button(self.panel, label="发送(\t&S)")
         self.send_button.Bind(wx.EVT_BUTTON, self.on_send)
@@ -62,11 +72,11 @@ class MainFrame(wx.Frame):
             self.panel, style=wx.TR_HAS_BUTTONS | wx.TR_LINES_AT_ROOT
         )
         self.root = self.tree.AddRoot("AI Chat")
-        self.tree.SetItemText(self.root, "Message List:")
-        self.current_message_node = self.tree.AppendItem(self.root, "Message:")
+        self.tree.SetItemText(self.root, "消息列表：")
         self.tree.ExpandAll()
+        self.tree.Bind(wx.EVT_KEY_UP, self.on_message_tree_key_up)
+        self.current_message_node = None
         self.current_reasoning_node = None
-        self.current_content_node = None
 
         sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(self.system_prompt_label, 0, wx.ALL | wx.CENTER, 5)
@@ -79,11 +89,83 @@ class MainFrame(wx.Frame):
         sizer.Add(self.input_ctrl, 0, wx.EXPAND | wx.ALL, 5)
         sizer.Add(self.send_button, 0, wx.ALL | wx.CENTER, 5)
         sizer.Add(self.tree_label, 0, wx.ALL | wx.CENTER, 5)
-        sizer.Add(self.tree, 1, wx.EXPAND)
+        sizer.Add(self.tree, 2, wx.EXPAND | wx.ALL, 5)
+
         self.panel.SetSizer(sizer)
         self.input_ctrl.SetFocus()
 
         self.Bind(wx.EVT_CLOSE, self.on_close)
+        self.capture_hot_key_id = wx.NewIdRef()
+        if not self.register_hot_key():
+            wx.MessageBox(
+                "请检查 ctrl+shift+f1 和 ctrl+shift+f2 是否被占用。",
+                "注册截屏热键热键失败",
+                wx.ICON_ERROR,
+            )
+        self.sound_player = SoundPlayer()
+        self.sound_player.start()
+
+    def register_hot_key(self) -> bool:
+        """
+        注册截屏热键
+        ctrl+shift+f1全屏截图
+        ctrl+shift+f2前台窗口截图
+        """
+        if not self.RegisterHotKey(
+            self.capture_hot_key_id, wx.MOD_ALT | wx.MOD_SHIFT, wx.WXK_F1
+        ):
+            return False
+
+        if not self.RegisterHotKey(
+            self.capture_hot_key_id, wx.MOD_ALT | wx.MOD_SHIFT, wx.WXK_F2
+        ):
+            return False
+
+        self.Bind(wx.EVT_HOTKEY, self.on_capture_hot_key, id=self.capture_hot_key_id)
+        return True
+
+    def on_capture_hot_key(self, event):
+        """
+        处理截屏热键事件
+        """
+        key_code = event.GetKeyCode()
+        if key_code == wx.WXK_F1:
+            image = capture_full_screen()
+        elif key_code == wx.WXK_F2:
+            image = capture_foreground_window()
+        else:
+            return
+        if base64_image := image_to_base64(image_=image):
+            self.sound_player.play("capture", PlayMode.ones_sync)
+            self.send_message(
+                self.input_ctrl.GetValue().strip()
+                or "详细描述一下这个图片， 最后给出你对这个图片的理解",
+                base64_image,
+            )
+
+        else:
+            wx.MessageBox("失败")
+
+    def on_error(self, exc: Exception, is_fail: bool):
+        wx.MessageBox(str(exc), "出错了", wx.ICON_ERROR)
+        if is_fail:
+            wx.CallAfter(self.Close)
+
+    def set_window_title(
+        self, first_title: str | None, last_title: str = "AI Chat Tree"
+    ):
+        """
+        修改窗口标题
+        """
+        if first_title is None:
+            first_title = ""
+
+        if first_title := first_title.strip():
+            first_title = f"{first_title} - "
+        else:
+            first_title = ""
+
+        self.SetTitle(f"{first_title}{last_title}")
 
     def on_system_prompt_change(self, event):
         """
@@ -91,46 +173,40 @@ class MainFrame(wx.Frame):
         """
         value = self.system_prompt_ctrl.GetValue().strip()
         if self.status.system_prompt != value:
+            self.status.is_change = True
             self.status.system_prompt = value
+
+    def on_tts_switch_check(self, event):
+        """
+        语音朗读开关变化
+        """
+        self.status.text_to_speech_option = (
+            TextToSpeechOption.play
+            if self.tts_checkbox.IsChecked()
+            else TextToSpeechOption.off
+        )
+        self.status.is_change = True
 
     def on_close(self, event):
         """
         处理窗口关闭事件
         """
         self.status.message_queue.put(None)
+        self.UnregisterHotKey(self.capture_hot_key_id)
         self.Destroy()
-
-    def on_begin(self) -> dict[str, Any]:
-        """
-        每次调用模型之前获取前端设定状态
-        线程不安全， 后端调用的时候需要枷锁
-        """
-        return {
-            "first_model_name": self.status.first_model,
-            "second_model_name": self.status.second_model,
-            "text_to_speech_option": self.status.text_to_speech_option,
-            "system_prompt": self.status.system_prompt,
-        }
+        self.sound_player.stop()
 
     def load_models_status(self, application: Application):
         """
         获取后端模型， 包括所有可用的模型和当前模型和备用模型
         """
-        model_info = application.get_model_info(ContentTag.all_model)
-        if model_info.content_tag != ContentTag.all_model:
-            return
-
-        self.status.models = model_info.metadata["models"]
-        self.status.first_model = model_info.metadata["first_model"]
-        self.status.second_model = model_info.metadata["second_model"]
-        self.status.text_to_speech_option = model_info.metadata["text_to_speech_option"]
+        self.status.load_models_status(application=application)
         self.tts_checkbox.SetValue(
             self.status.text_to_speech_option != TextToSpeechOption.off
         )
-
         self.set_model_list_box()
 
-    def set_model_list_box(self):
+    def set_model_list_box(self, selection: int = 0):
         """
         填充模型列表
         """
@@ -140,7 +216,7 @@ class MainFrame(wx.Frame):
                 [self.fmt_model(model) for model in self.status.models]
             )
 
-            self.model_list_box.SetSelection(0)
+            self.model_list_box.SetSelection(selection)
 
     def fmt_model(self, model: tuple, auto_label: bool = True) -> str:
         """
@@ -185,33 +261,45 @@ class MainFrame(wx.Frame):
         """
         menu_item = event.GetEventObject()
         menu_label = menu_item.GetLabel(event.GetId())
-        if menu_label == MENU_ITEM_SET_FIRST_MODEL:
-            wx.MessageBox("设定主要模型")
-        elif menu_label == MENU_ITEM_SET_SECOND_MODEL:
-            wx.MessageBox("设定备用模型")
+        target_index = self.model_list_box.GetSelection()
+        is_change = self.status.set_current_model(
+            target_index, is_first_model=menu_label == MENU_ITEM_SET_FIRST_MODEL
+        )
+        if is_change:
+            self.set_model_list_box(selection=target_index)
 
     def on_send(self, event):
         """
         处理发送消息事件
         """
-        user_input = self.input_ctrl.GetValue()
+        user_input = self.input_ctrl.GetValue().strip()
         if user_input:
-            self.status.message_queue.put(user_input)
+            self.send_message(user_input)
             self.input_ctrl.Clear()
-            self.change_Enable(False)
-            # 添加用户消息， AI推理和AI回应节点
-            user_node = self.tree.AppendItem(
-                self.current_message_node, f"User: {user_input}"
-            )
-            self.current_reasoning_node = self.tree.AppendItem(
-                self.current_message_node, "Reasoning:"
-            )
-            self.current_content_node = self.tree.AppendItem(
-                self.current_message_node, "assistant:"
-            )
-            self.tree.SetFocus()
-            self.tree.Expand(self.current_message_node)
-            self.tree.SelectItem(user_node)
+        else:
+            wx.MessageBox("输入有效的文本内容！", "无效或者空的输入：", wx.ICON_WARNING)
+
+    def send_message(self, message: str, base64_image: str | None = None):
+        """
+        更新UI发送消息
+        """
+        self.status.current_user_input = message
+        self.status.message_queue.put((message, base64_image))
+        self.change_Enable(False)
+        self.create_message_tree_element(message)
+        self.sound_player.play("send-message", PlayMode.ones_sync)
+        self.sound_player.play("wait", PlayMode.loop)
+
+    def create_message_tree_element(self, user_input: str):
+        """
+        添加用户消息， AI推理和AI回应节点
+        """
+        self.current_message_node = self.tree.AppendItem(
+            self.root, f"{user_input.splitlines()[0]} ....."
+        )
+
+        self.tree.SetFocus()
+        self.tree.SelectItem(self.current_message_node)
 
     def change_Enable(self, enable: bool):
         """
@@ -233,6 +321,10 @@ class MainFrame(wx.Frame):
             model_result.content = f"\n{model_result.content}"
 
         self.status.line += model_result.content
+        if self.status.current_model_name != model_result.model_name:
+            self.status.current_model_name = model_result.model_name
+            wx.CallAfter(self.set_window_title, model_result.model_name)
+
         if self.status.line[-1:] == "\n" or model_result.tag == ContentTag.end:
             content = self.status.line.strip()
             if content:
@@ -248,24 +340,58 @@ class MainFrame(wx.Frame):
         if not messages:
             return
 
-        # 创建新的消息节点， 在每个消息节点包含了 用户消息 AI推理和AI回应三个节点的内容
-        self.current_message_node = self.tree.AppendItem(self.root, "Message:")
-        self.tree.Expand(self.current_content_node)
-        self.tree.SelectItem(self.current_content_node)
-        # 发送完成信号
-        self.on_chunk(ModelResult("", ContentTag.end))
+        # 更新最后残留的内容
+        self.on_chunk(
+            ModelResult("", ContentTag.end, model_name=self.status.current_model_name)
+        )
+        self.current_reasoning_node = None
+        self.sound_player.stop_play()
 
     def add_message_to_tree(self, line: str):
         """
         最后在这个方法里更新UI内容
         """
+
         if self.status.current_content_tag == ContentTag.reasoning_content:
-            child_node = self.tree.AppendItem(self.current_reasoning_node, "reasoning:")
+            if self.current_reasoning_node is None:
+                self.current_reasoning_node = self.tree.AppendItem(
+                    self.current_message_node,
+                    "思考内容：",
+                )
+
+            self.tree.AppendItem(self.current_reasoning_node, line)
 
         else:
-            child_node = self.tree.AppendItem(self.current_content_node, "AI助手：")
+            self.tree.AppendItem(self.current_message_node, line)
 
-        self.tree.SetItemText(child_node, line)
+        self.tree.Expand(self.current_message_node)
+        self.sound_player.stop_play()
+        self.sound_player.play("display-message", PlayMode.ones_async)
+
+    def get_tree_all_text(self, begin_node):
+        """
+        生成器函数， 获取self.tree的某个节点及其子孙节点的文本内容
+        """
+        child, cookie = self.tree.GetFirstChild(begin_node)
+        while child.IsOk():
+            yield self.tree.GetItemText(child)
+            yield from self.get_tree_all_text(child)
+            child, cookie = self.tree.GetNextChild(begin_node, cookie)
+
+    def on_message_tree_key_up(self, event):
+        """
+        消息树状图键盘按键被按下
+        """
+        if event.GetKeyCode() == ord("C") and event.ControlDown():
+            selection = self.tree.GetSelection()
+            text = self.tree.GetItemText(selection)
+            if event.ShiftDown():
+                lines = "\n".join(self.get_tree_all_text(selection))
+                text = f"{text}\n{lines}"
+
+            pyperclip.copy(text=text)
+
+        event.Skip()
 
 
 if __name__ == "__main__":
@@ -278,10 +404,11 @@ if __name__ == "__main__":
         application = stack.enter_context(
             Application(
                 config=config,
-                model_name="deepseek-r1:14b",
+                model_name="gemma3:27b",
                 second_model_name="deepseek-chat",
                 text_to_speech_option=TextToSpeechOption.play,
-                begin_callback=frame.on_begin,
+                error_callback=frame.on_error,
+                begin_callback=frame.status.on_begin,
                 input_callback=frame.status.message_queue.get,
                 chunk_callback=frame.on_chunk,
                 finish_callback=frame.on_finish,
@@ -294,5 +421,6 @@ if __name__ == "__main__":
 
         frame.Show()
         app.MainLoop()
-        clear_queue(frame.status.message_queue)
-        application.join()
+        if threading.active_count() > 1:
+            clear_queue(frame.status.message_queue)
+            application.join()

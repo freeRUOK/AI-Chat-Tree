@@ -1,5 +1,5 @@
 # AI-Chat-Tree
-简单AI聊天程序， 支持在线OpenAI和本地ollama调用， 聊天内容在Tree Ctrl上展示
+多端AI聊天程序， 支持在线OpenAI和本地ollama调用， 支持CLI； GUI和WEB界面
 
 ## 介绍
     一个LLM聊天助手， 支持cli, gui和web界面…… 
@@ -17,7 +17,7 @@ web前端使用vue+socket.io实现， 目前不完善。
 ```bash
 git clone https://github.com/FreeRUOK/AI-Chat-Tree.git
 cd AI-Chat-Tree\chat
-protry install
+poetry install
 poetry shell
 set DEBUG_MODE=1 # 启用调试模式
 python chat chat # cli

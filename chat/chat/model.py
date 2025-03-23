@@ -24,9 +24,20 @@ class ModelResult:
     reasoning_content or chunk
     """
 
-    def __init__(self, content: str, tag: ContentTag):
+    def __init__(self, content: str, tag: ContentTag, model_name: str | None = None):
         self.content = content
         self.tag = tag
+        self.model_name = model_name
+
+    def to_dict(self) -> dict[str, str | None]:
+        """
+        转换到dict类型
+        """
+        return {
+            "content": self.content,
+            "tag": self.tag.value,
+            "model_name": self.model_name,
+        }
 
 
 class ModelInfo:
@@ -188,12 +199,24 @@ class ModelOutput:
         """
         self.stop_text_to_speech()
 
+    def set_text_to_text_option(self, new_option: TextToSpeechOption):
+        """
+        设置语音朗读选项
+        """
+        self._text_to_speech_option = new_option
+        if self._text_to_speech:
+            self._text_to_speech.option = new_option
+            if new_option == TextToSpeechOption.off:
+                self.stop_text_to_speech()
+
     def stop_text_to_speech(self):
         """
         结束tts线程
         """
+        self._tts_content = ""
         if self._text_to_speech:
             self._text_to_speech.stop()
+            self._text_to_speech = None
 
     def start_text_to_speech(self):
         """
@@ -301,8 +324,12 @@ class ModelOutput:
         如果可用, 语音朗读llm内容
         """
 
-        if self._text_to_speech:
+        if (
+            self._text_to_speech
+            or self._text_to_speech_option != TextToSpeechOption.off
+        ):
             if self._tts_content[-1:] == "\n" or is_last:
                 self.start_text_to_speech()
-                self._text_to_speech.submit(text=self._tts_content)
-                self._tts_content = ""
+                if self._text_to_speech:
+                    self._text_to_speech.submit(text=self._tts_content)
+                    self._tts_content = ""

@@ -8,6 +8,7 @@ from typing import Callable
 from enum import Enum
 from io import BytesIO
 import asyncio
+import re
 import threading
 from queue import Queue
 import edge_tts
@@ -49,12 +50,13 @@ class TextToSpeech(threading.Thread):
         self._volume = volume
         self._process_callback = process_callback
         self._textQueue: Queue = Queue()
+        self._reg_replace = re.compile(r"[#*|]")
 
     def submit(self, text: str):
         """
         外部线程提交需要合成的文本内容
         """
-        text = text.strip()
+        text = self._reg_replace.sub(",", text.strip())
         if text:
             self._textQueue.put(text)
 
@@ -62,8 +64,10 @@ class TextToSpeech(threading.Thread):
         """
         停止运行
         """
-        self._textQueue.put(None)
-        self.join()
+        if self.is_alive():
+            self._textQueue.put(None)
+            self.join()
+
         print("Text To Thread Stop.")
 
     def playAudioSegment(self, audio_segment: AudioSegment):
@@ -89,6 +93,9 @@ class TextToSpeech(threading.Thread):
         处理音频， 自动播放或者让process_callback处理
         """
         while audio_buffer := audioQueue.get():
+            if self.option == TextToSpeechOption.off:
+                continue
+
             if self.option != TextToSpeechOption.byte_io:
                 audio_segment = AudioSegment.from_mp3(audio_buffer)
                 self.playAudioSegment(audio_segment=audio_segment)

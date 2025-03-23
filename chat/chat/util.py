@@ -6,9 +6,14 @@
 # 一些随时都可能使用到的工具函数
 # 这里提供了日志文件的配置， 也许该分离日志和错误处理部分
 from queue import Queue
+from io import BytesIO
+import base64
 from pathlib import Path
 import re
 import os
+from PIL import Image
+import pyautogui
+import pygetwindow as gw  # type: ignore
 from loguru import logger
 import prompt_toolkit
 import pyperclip  # type: ignore
@@ -149,3 +154,64 @@ def input_handler(user_message: str) -> tuple[ContentTag, str | None]:
             )
 
     return (ContentTag.empty, None)
+
+
+def image_to_base64(image_: Image.Image | None) -> str | None:
+    """
+    把图片转换到base64字符串
+    """
+    if image_ is None:
+        return None
+
+    try:
+        buffer = BytesIO()
+        image_.save(buffer, format="JPEG")
+        img_bytes = buffer.getvalue()
+        base64_str = base64.b64encode(img_bytes).decode(encoding="UTF-8")
+        return base64_str
+    except Exception as e:
+        debug_log(e)
+
+    return None
+
+
+def read_image_file(image_path: str) -> Image.Image | None:
+    """
+    打开图片文件
+    """
+    try:
+        with Image.open(image_path) as image:
+            return image
+    except Exception as e:
+        debug_log(e)
+
+    return None
+
+
+def capture_full_screen() -> Image.Image | None:
+    """
+    全屏截图
+    """
+    try:
+        return pyautogui.screenshot()
+    except Exception as e:
+        debug_log(e)
+
+        return None
+
+
+def capture_foreground_window() -> Image.Image | None:
+    """
+    给当前前台窗口截屏
+    """
+    window = gw.getActiveWindow()
+    if window is None:
+        return None
+
+    x, y, width, height = window.left, window.top, window.width, window.height
+    try:
+        return pyautogui.screenshot(region=(x, y, width, height))
+    except Exception as e:
+        debug_log(e)
+
+    return None

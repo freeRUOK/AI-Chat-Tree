@@ -32,7 +32,7 @@ messages.value.all();
 
 socket.on("chat", (newMessage) => {
   if (newMessage) {
-    const html_doc = marked.parseLine(newMessage.text);
+    const html_doc = marked.parseLine(newMessage.content);
     if (html_doc) {
       currentMessage.value?.appendBody(html_doc, newMessage[["tag"]] === "end");
     }
@@ -45,43 +45,66 @@ socket.on("audio", (newAudio) => {
   }
 });
 
+const systemPrompt = ref("");
+const modelList = ref([]);
+const firstModel = ref("null");
+const secondModel = ref("null");
+const textToSpeechSwitch = ref(false);
+const isChange = ref(false);
+
+socket.on("model_status", (modelStatus) => {
+  if (modelStatus) {
+    systemPrompt.value = modelStatus.system_prompt;
+    modelList.value.slice(0, modelList.value.length);
+    modelStatus.models.forEach((item) => {
+      modelList.value.push({
+        value: item[0],
+        label: `${item[0]}, ${item[1] ? "在线" : "本地"}`,
+      });
+    });
+
+    firstModel.value = modelStatus.first_model;
+    secondModel.value = modelStatus.second_model;
+    textToSpeechSwitch.value = modelStatus.text_to_speech_option;
+  }
+});
+
+function sendNewStatus() {
+  if (!isChange.value) {
+    return;
+  }
+  isChange.value = false;
+  const updateStatus = {
+    system_prompt: systemPrompt.value,
+    first_model: firstModel.value,
+    second_model: secondModel.value,
+    text_to_speech_option: textToSpeechSwitch.value,
+  };
+  socket.emit("update_status", updateStatus);
+}
+
 function send(messageBody) {
   messages.value.put(new Message("Self:", messageBody.text, "user-message"));
   currentMessage.value = new Message("Assistant:", "", "llm-message");
   messages.value.put(currentMessage.value);
+  sendNewStatus();
   socket.emit("chat", messageBody);
   showMessage("发送成功");
 }
-
-const systemPrompt = ref("默认提示");
-const modelList = ref([
-  { value: "m1", label: "1" },
-  { value: "m2", label: "2" },
-  { value: "m3", label: "3" },
-  { value: "m4", label: "4" },
-  { value: "m5", label: "5" },
-  { value: "m6", label: "6" },
-]);
-const firstModel = ref("null");
-const secondModel = ref("null");
-const textToSpeechSwitch = ref(false);
 </script>
 <template>
   <OptionBar
     :systemPrompt="systemPrompt"
     :modelList="modelList"
+    :firstModel="firstModel"
+    :secondModel="secondModel"
     :textToSpeechSwitch="textToSpeechSwitch"
     @update:systemPrompt="systemPrompt = $event"
     @update:firstModel="firstModel = $event"
     @update:secondModel="secondModel = $event"
     @update:textToSpeechSwitch="textToSpeechSwitch = $event"
+    @update:isChange="isChange = $event"
   />
-  <div>
-    <p>{{ systemPrompt }}</p>
-    <p>{{ firstModel }}</p>
-    <p>{{ secondModel }}</p>
-    <p>{{ textToSpeechSwitch }}</p>
-  </div>
 
   <MessageListComponent :message-collection="messages" />
   <SendMessageComponent @new-message="send" />

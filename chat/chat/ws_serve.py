@@ -60,6 +60,22 @@ class WSServe:
         def index():
             return send_from_directory(static_folder_path, "index.html")
 
+    def load_models_status(self):
+        """
+        获取后端模型， 包括所有可用的模型和当前模型和备用模型
+        """
+        if self.application:
+            self.serve_status.load_models_status(application=self.application)
+            status = {
+                "system_prompt": self.serve_status.system_prompt,
+                "models": self.serve_status.models,
+                "first_model": self.serve_status.first_model,
+                "second_model": self.serve_status.second_model,
+                "text_to_speech_option": not self.serve_status.text_to_speech_option
+                == TextToSpeechOption.off,
+            }
+            self.sio.emit("model_status", status)
+
     def setup_socketio_events(self):
         """
         注册socketio的事件
@@ -70,6 +86,7 @@ class WSServe:
             """
             socketio的connect事件
             """
+            self.load_models_status()
             debug_logger.info("Client connected")
 
         @self.sio.on("chat")
@@ -80,9 +97,28 @@ class WSServe:
             debug_logger.info(f"Received message: {message}")
             msg = message["text"].strip()
             if msg:
-                self.serve_status.message_queue.put(msg)
+                self.serve_status.message_queue.put((msg, None))
             else:
                 self.sio.emit("chat", {"text": "Empty Input Message."})
+
+        @self.sio.on("update_status")
+        def handle_update_status(new_status):
+            """
+            处理socketio的update_status自定义事件
+            """
+            if new_status is None:
+                return
+
+            self.serve_status.is_change = True
+            self.serve_status.system_prompt = new_status["system_prompt"]
+            self.serve_status.first_model = new_status["first_model"]
+            self.serve_status.second_model = new_status["second_model"]
+            self.serve_status.text_to_speech_option = (
+                TextToSpeechOption.byte_io
+                if new_status["text_to_speech_option"]
+                else TextToSpeechOption.off
+            )
+            debug_logger.info(f"Received New Status: {new_status}")
 
         @self.sio.on("disconnect")
         def handle_disconnect():
@@ -100,9 +136,15 @@ class WSServe:
             model_result.content = f"\n{model_result.content}"
 
         self.serve_status.line += model_result.content
+        self.serve_status.current_model_name = model_result.model_name
         if self.serve_status.line[-1:] == "\n" or model_result.tag == ContentTag.end:
             self.sio.emit(
-                "chat", {"text": self.serve_status.line, "tag": model_result.tag.value}
+                "chat",
+                ModelResult(
+                    self.serve_status.line,
+                    self.serve_status.current_content_tag,
+                    self.serve_status.current_model_name,
+                ).to_dict(),
             )
             self.serve_status.line = ""
 
@@ -116,7 +158,11 @@ class WSServe:
         """
         模型输出完成之后调用，清空缓冲区
         """
-        self.output_chunk(model_result=ModelResult("", tag=ContentTag.end))
+        self.output_chunk(
+            model_result=ModelResult(
+                "", tag=ContentTag.end, model_name=self.serve_status.current_model_name
+            )
+        )
 
     def run(self, port=8001):
         """
@@ -124,18 +170,20 @@ class WSServe:
         """
         with ExitStack() as stack:
             config = stack.enter_context(Config())
-            application = stack.enter_context(
+            self.application = stack.enter_context(
                 Application(
                     config=config,
                     model_name="qwq:latest",
-                    second_model_name="qwq",
+                    second_model_name="deepseek-r1:8b",
                     text_to_speech_option=TextToSpeechOption.byte_io,
+                    begin_callback=self.serve_status.on_begin,
                     input_callback=self.serve_status.message_queue.get,
                     chunk_callback=self.output_chunk,
                     audio_callback=self.output_audio,
                     finish_callback=self.output_finish,
                 )
             )
-            application.start()
+            if self.application:
+                self.application.start()
 
             self.sio.run(self.app, host="0.0.0.0", port=port)

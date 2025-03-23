@@ -8,11 +8,14 @@ import { ref, watch } from "vue";
 
 const props = defineProps({
   systemPrompt: [String, null],
+  firstModel: [String, null],
+  secondModel: [String, null],
   modelList: {
     type: Array,
     default: () => [],
   },
   textToSpeechSwitch: Boolean,
+  isChange: Boolean,
 });
 
 const emit = defineEmits([
@@ -20,35 +23,45 @@ const emit = defineEmits([
   "update:firstModel",
   "update:secondModel",
   "update:textToSpeechSwitch",
+  "update:isChange",
 ]);
 
 // 响应式变量
 const systemPromptRef = ref(props.systemPrompt);
-const firstModelRef = ref(props.modelList[0]?.value || "");
-const secondModelRef = ref(props.modelList[1]?.value || "");
+const firstModelRef = ref(props.firstModel?.value || "");
+const secondModelRef = ref(props.secondModel?.value || "");
 const textToSpeechSwitchRef = ref(props.textToSpeechSwitch);
+const isChangeRef = ref(props.isChange);
 
 // 监听 props 的变化并同步到响应式变量
 watch(
   () => props.systemPrompt,
   (newValue) => {
     systemPromptRef.value = newValue;
+    isChangeRef.value = true;
   },
 );
 
 watch(
-  () => props.modelList,
+  () => props.firstModel,
   (newValue) => {
-    firstModelRef.value = newValue[0]?.value || "";
-    secondModelRef.value = newValue[1]?.value || "";
+    firstModelRef.value = newValue;
+    isChangeRef.value = true;
   },
-  { deep: true },
 );
 
+watch(
+  () => props.secondModel,
+  (newValue) => {
+    secondModelRef.value = newValue;
+    isChangeRef.value = true;
+  },
+);
 watch(
   () => props.textToSpeechSwitch,
   (newValue) => {
     textToSpeechSwitchRef.value = newValue;
+    isChangeRef.value = true;
   },
 );
 
@@ -67,6 +80,10 @@ watch(secondModelRef, (newValue) => {
 
 watch(textToSpeechSwitchRef, (newValue) => {
   emit("update:textToSpeechSwitch", newValue);
+});
+
+watch(isChangeRef, (newValue) => {
+  emit("update:isChange", newValue);
 });
 </script>
 
@@ -96,11 +113,7 @@ watch(textToSpeechSwitchRef, (newValue) => {
     </select>
 
     <label>
-      <input
-        type="checkbox"
-        v-model="textToSpeechSwitchRef"
-        aria-label="语音朗读开关"
-      />
+      <input type="checkbox" v-model="textToSpeechSwitchRef" />
       语音朗读
     </label>
   </div>

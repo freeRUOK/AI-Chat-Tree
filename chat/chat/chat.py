@@ -7,14 +7,15 @@
 # 机器和人通过这个类相互交流
 import threading
 from copy import deepcopy
-from typing import Callable
+from typing import Callable, Any
 from datetime import datetime, timedelta
 import ollama
 from openai import APIStatusError, RateLimitError, APIConnectionError
 from httpx import ReadTimeout as OpenAIReadTimeout
+from model_tools import create_or_switch_model
 from util import debug_log, input_handler
 
-from model import Model, ModelResult, ModelOutput, ModelInfo
+from model import Model, ModelResult, ModelOutput
 from consts import ContentTag
 
 
@@ -30,7 +31,7 @@ class Chat:
         models: list,
         second_model: Model | None = None,
         system_prompt: str = "你是一个乐于助人的AI助手， 性格和网络喷子差不多， 批评用户毫无手软， 不过说出的话总是让人发人深省",
-        begin_callback: Callable[[], ModelInfo] | None = None,
+        begin_callback: Callable[[], dict | None] | None = None,
     ):
         """
         初始化Chat， 作为中间人准备好模型的所有方面
@@ -46,7 +47,7 @@ class Chat:
 
         self._content = ""
         self._reasoning_content = ""
-        self._model_result_tag = ContentTag.reasoning_content
+        self._model_result_tag = ContentTag.chunk
 
         self._start_time: datetime
 
@@ -57,12 +58,20 @@ class Chat:
             },
         ]
 
-    def send_message(self, user_message: str):
+    def send_message(self, user_message: str, base64_image: str | None = None):
         """
         发送聊天消息， 处理AI的回复消息
         """
-        self._messages.append({"role": "user", "content": user_message})
+        new_message: dict[str, Any] = {"role": "user", "content": user_message}
+        if base64_image is not None:
+            new_message["images"] = [
+                base64_image,
+            ]
+
+        self._messages.append(new_message)
+
         self._model = self._first_model
+        self._model_result_tag = ContentTag.chunk
         # 如果错误可以恢复的话最多3次重试
         for i in range(3):
             try:
@@ -84,6 +93,7 @@ class Chat:
                 debug_log(e)
                 if not self._error_handler(e, call_count=i):
                     print("建议查看网络状态或查看配置是否异常。")
+                    self._model = self._first_model
                     break
 
             print(f"第{i + 1}次重试。")
@@ -130,6 +140,7 @@ class Chat:
             finish_reason = chunk.done_reason
 
         model_result = self._delta_handler(delta=delta)
+        model_result.model_name = chunk.model
 
         self._model_output.output_chunk(
             model_result=deepcopy(
@@ -166,6 +177,7 @@ class Chat:
                 if delta.content == "<think>"
                 else ContentTag.chunk
             )
+            delta.content = "\n"
 
         return ModelResult(delta.content, self._model_result_tag)
 
@@ -181,7 +193,6 @@ class Chat:
         self._reasoning_content = ""
         self._content = ""
         self._tts_content = ""
-        self._model_result_tag = ContentTag.reasoning_content
 
     def _show_running_info(self, chunk, running_td: timedelta):
         """
@@ -202,18 +213,20 @@ class Chat:
                 f"Token speed: {token_speed}, promptTokens: {prompt_tokens}, Completion Tokens: {completion_tokens}, totalTokens: {total_tokens}"
             )
 
-    def run(self, input_callback: Callable[[], str] | None = None):
+    def run(self, input_callback: Callable[[], tuple[str, str | None]] | None = None):
         """
         运行聊天机器人
         默认情况下从命令行获取用户的输入
         如果想要从其他来源输入内容的话需要传递有效的input_callback函数
-        input_callback应当返回一个str类型
-        # 后续扩展多模态模型的话可能被修改
+        input_callback应当返回一个Tuple[str, str | None]类型
+        如果需要输入图片的话第二个元素传入base64编码的图片
         """
         if input_callback:
             while user_message := input_callback():
                 self.set_status()
-                self.send_message(user_message=user_message)
+                self.send_message(
+                    user_message=user_message[0], base64_image=user_message[1]
+                )
 
         else:
             self.default_input()
@@ -256,46 +269,35 @@ class Chat:
 
         with self._lock:
             client_status = self._begin_callback()
+            if client_status is None:
+                return
 
-            self._model_output._text_to_speech_option = client_status.metadata[
-                "text_to_speech_option"
-            ]
+            self._model_output.set_text_to_text_option(
+                client_status["text_to_speech_option"]
+            )
 
-            new_system_prompt = client_status.metadata["system_prompt"]
+            new_system_prompt = client_status["system_prompt"]
             if self._messages[0]["content"] != new_system_prompt:
                 self._messages[0]["content"] = new_system_prompt
 
             self.switch_model(
-                first_model=client_status.metadata["first_model"],
-                second_model=client_status.metadata["second_model"],
+                first_model=client_status["first_model_name"],
+                second_model=client_status["second_model_name"],
             )
 
-    def switch_model(self, first_model: str, second_model: str):
+    def switch_model(self, first_model: str, second_model: str | None = None):
         """
         切换模型
         """
-        if new_model := self.set_model(new_model=first_model):
-            self._first_model = new_model
+        if self._first_model.current_model != first_model:
+            if new_model := create_or_switch_model(
+                model_list=self._models, model_name=first_model, model=self._first_model
+            ):
+                self._first_model = new_model
 
-        if new_model := self.set_model(new_model=second_model):
-            self._second_model = new_model
-
-    def find_model(self, name: str) -> int:
-        for index, model in enumerate(self._models):
-            if name in model["sub_models"]:
-                return index
-
-        return -1
-
-    def set_model(self, new_model: str) -> Model | None:
-        index = self.find_model(new_model)
-
-        if index != -1:
-            if new_model in self._models[index]["sub_models"]:
-                self._first_model.current_model = new_model
-                return self._first_model
-
-            else:
-                return Model.from_dict(data=self._models[index])
-
-        return None
+        if self._second_model and self._second_model.current_model != second_model:
+            self._second_model = create_or_switch_model(
+                model_list=self._models,
+                model_name=second_model,
+                model=self._second_model,
+            )

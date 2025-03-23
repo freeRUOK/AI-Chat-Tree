@@ -13,6 +13,7 @@ from config import Config
 from consts import default_system_prompt, ContentTag
 from chat import Chat
 from model import ModelOutput, Model, ModelResult, ModelInfo
+from model_tools import create_or_switch_model
 from util import debug_log, DEBUG_MODE
 from text_to_speech import TextToSpeechOption
 
@@ -29,8 +30,9 @@ class Application(threading.Thread):
         second_model_name: str = "deepseek-r1:14b",
         system_prompt: str = default_system_prompt,
         text_to_speech_option: TextToSpeechOption = TextToSpeechOption.off,
-        begin_callback: Callable[[], dict] | None = None,
-        input_callback: Callable[[], str] | None = None,
+        error_callback: Callable[[Exception, bool], None] | None = None,
+        begin_callback: Callable[[], dict | None] | None = None,
+        input_callback: Callable[[], tuple[str, str | None]] | None = None,
         chunk_callback: Callable[[ModelResult], None] | None = None,
         audio_callback: Callable[[BytesIO], None] | None = None,
         finish_callback: Callable[[list], None] | None = None,
@@ -44,6 +46,7 @@ class Application(threading.Thread):
         self._second_model_name = second_model_name
         self._system_prompt = system_prompt
         self._text_to_speech_option = text_to_speech_option
+        self._error_callback = error_callback
         self._begin_callback = begin_callback
         self._input_callback = input_callback
         self._chunk_callback = chunk_callback
@@ -124,8 +127,13 @@ class Application(threading.Thread):
 
             self._is_begin = True
         except ValueError as e:
-            print(f"错误： {e}")
+            if self._error_callback:
+                self._error_callback(e, True)
+            else:
+                print(f"错误： {e}")
+
             debug_log(e)
+            return
 
         self._chat = Chat(
             first_model=first_model,
@@ -133,6 +141,7 @@ class Application(threading.Thread):
             models=self._models,
             second_model=second_model,
             system_prompt=system_prompt,
+            begin_callback=self._begin_callback,
         )
 
     def run(self):
@@ -154,7 +163,7 @@ class Application(threading.Thread):
                     system_prompt=self._system_prompt,
                 )
                 if not self._is_begin:
-                    raise RuntimeError("调用run方法之前必须正确调用_begin方法")
+                    return
 
                 self._chat.run(input_callback=self._input_callback)
         except Exception as e:
@@ -162,7 +171,10 @@ class Application(threading.Thread):
             if DEBUG_MODE:
                 raise e
             else:
-                print(f"错误： {e}")
+                if self._error_callback:
+                    self._error_callback(e, True)
+                else:
+                    print(f"错误： {e}")
 
     def load_models(self) -> list:
         """
@@ -187,7 +199,11 @@ class Application(threading.Thread):
         except ollama.ResponseError as e:
             ollama_sub_models = []
             debug_log(e)
-            print("加载ollama模型失败， 检查是否在运行或者建议安装。")
+            error_prompt = "加载ollama模型失败， 请检查ollama服务是否正在运行或者建议安装配置ollama服务。。"
+            if self._error_callback:
+                self._error_callback(ValueError(error_prompt), False)
+            else:
+                print(error_prompt)
 
         if ollama_sub_models:
             ollama_models["sub_models"] = ollama_sub_models
@@ -203,7 +219,7 @@ class Application(threading.Thread):
         return models
 
     def build_model(
-        self, first_model_name, second_model_name: str
+        self, first_model_name: str, second_model_name: str | None
     ) -> tuple[Model, Model | None]:
         """
         通过sub_model_name查询创建主要模型和备用模型
@@ -213,15 +229,8 @@ class Application(threading.Thread):
         if len(self._models) == 0:
             raise ValueError("没有可用的模型, 请安装ollama或者添加在线模型。")
 
-        first_model, second_model = None, None
-        for model in self._models:
-            if first_model_name in model["sub_models"]:
-                model.update({"current_model": first_model_name})
-                first_model = Model.from_dict(model)
-            if second_model_name in model["sub_models"]:
-                model.update({"current_model": second_model_name})
-                second_model = Model.from_dict(model)
-
+        first_model = create_or_switch_model(self._models, first_model_name)
+        second_model = create_or_switch_model(self._models, second_model_name)
         if first_model is None:
             raise ValueError(f"没有找到子模型： {first_model_name}")
 
