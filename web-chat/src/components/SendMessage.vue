@@ -31,14 +31,13 @@ function emitNewMessage() {
   if (fileData.value !== null) {
     eventBody.isEmpty = false;
     eventBody.fileData = fileData.value;
-
     fileData.value = null;
   }
   // 真正从内部发送消息
   if (!eventBody.isEmpty) {
     emits("newMessage", {
       text: eventBody?.message,
-      fileData: eventBody?.fileData,
+      image: eventBody?.fileData,
     });
   }
 }

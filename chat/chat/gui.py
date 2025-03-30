@@ -9,19 +9,14 @@
 from contextlib import ExitStack
 import threading
 import wx  # type: ignore
-import wx.media  # type: ignore
 import pyperclip  # type: ignore
+import pygetwindow as gw  # type: ignore
 from model import ModelResult
 from config import Config
 from application import Application
 from consts import ContentTag
 from sound_player import PlayMode, SoundPlayer
-from util import (
-    clear_queue,
-    capture_foreground_window,
-    capture_full_screen,
-    image_to_base64,
-)
+from util import clear_queue, ImageHandler
 from gui_consts import MENU_ITEM_SET_FIRST_MODEL, MENU_ITEM_SET_SECOND_MODEL
 from data_status import DataStatus as FrameStatus
 from text_to_speech import TextToSpeechOption
@@ -36,6 +31,7 @@ class MainFrame(wx.Frame):
         super().__init__(parent=None, title="AI Chat Tree", size=(1200, 900))
 
         self.status = FrameStatus()
+        self._image_handler = ImageHandler()
 
         self.panel = wx.Panel(self)
 
@@ -104,22 +100,21 @@ class MainFrame(wx.Frame):
             )
         self.sound_player = SoundPlayer()
         self.sound_player.start()
+        self.new_menu_bar()
 
     def register_hot_key(self) -> bool:
         """
         注册截屏热键
-        ctrl+shift+f1全屏截图
-        ctrl+shift+f2前台窗口截图
+        Alt+shift+f1全屏截图
+        alt+shift+f2前台窗口截图
+        alt+shift+f3 调用设备镜头拍照
+        alt+shift+f4 选择一个图片文件
         """
-        if not self.RegisterHotKey(
-            self.capture_hot_key_id, wx.MOD_ALT | wx.MOD_SHIFT, wx.WXK_F1
-        ):
-            return False
-
-        if not self.RegisterHotKey(
-            self.capture_hot_key_id, wx.MOD_ALT | wx.MOD_SHIFT, wx.WXK_F2
-        ):
-            return False
+        for key_code in [wx.WXK_F1, wx.WXK_F2, wx.WXK_F3, wx.WXK_F4]:
+            if not self.RegisterHotKey(
+                self.capture_hot_key_id, wx.MOD_ALT | wx.MOD_SHIFT, key_code
+            ):
+                return False
 
         self.Bind(wx.EVT_HOTKEY, self.on_capture_hot_key, id=self.capture_hot_key_id)
         return True
@@ -128,23 +123,83 @@ class MainFrame(wx.Frame):
         """
         处理截屏热键事件
         """
+        if not self.send_button.IsEnabled():
+            return
+
         key_code = event.GetKeyCode()
-        if key_code == wx.WXK_F1:
-            image = capture_full_screen()
-        elif key_code == wx.WXK_F2:
-            image = capture_foreground_window()
+        if key_code in [wx.WXK_F1, wx.WXK_F2]:
+            self._image_handler.capture_screen(is_full_screen=key_code == wx.WXK_F1)
+
+        elif key_code == wx.WXK_F3:
+            self._image_handler.capture()
+        elif key_code == wx.WXK_F4:
+            self.open_image_file()
         else:
             return
-        if base64_image := image_to_base64(image_=image):
+
+        self.send_image()
+
+    def open_image_file(self):
+        """
+        从文件管理器里打开一个图片文件并转换到Image.Image对象
+        """
+        file_dialog = wx.FileDialog(
+            self,
+            "请选择一个图片文件",
+            "",
+            "",
+            "所有文件 (*.*)|*.*",
+            wx.FD_FILE_MUST_EXIST | wx.FD_OPEN,
+        )
+        if file_dialog.ShowModal() == wx.ID_OK:
+            image_path = file_dialog.GetPath()
+            self._image_handler.read_image_file(image_path)
+
+        file_dialog.Destroy()
+
+    def send_image(self):
+        """
+        添加base64编码的图片并发送
+        """
+        if base64_image := self._image_handler.to_base64():
+            self.set_global_focus_()
             self.sound_player.play("capture", PlayMode.ones_sync)
             self.send_message(
-                self.input_ctrl.GetValue().strip()
-                or "详细描述一下这个图片， 最后给出你对这个图片的理解",
+                self.input_ctrl.GetValue().strip() or "图片里是什么？",
                 base64_image,
             )
 
         else:
-            wx.MessageBox("失败")
+            wx.MessageBox("获取图片失败")
+
+        self._image_handler.close_current_image()
+
+    def new_menu_bar(self):
+        """
+        创建alt菜单
+        """
+        menu_bar = wx.MenuBar()
+        file_menu = wx.Menu()
+        file_menu.Append(wx.ID_OPEN, "打开\tCtrl+O", "打开图片文件")
+
+        help_menu = wx.Menu()
+        help_menu.Append(wx.ID_ABOUT, "关于\tCtrl+A", "关于本程序")
+
+        menu_bar.Append(file_menu, "文件(&F)")
+        menu_bar.Append(help_menu, "帮助(&H)")
+        self.SetMenuBar(menu_bar)
+        self.Bind(wx.EVT_MENU, self.on_menu_bar, id=wx.ID_OPEN)
+        self.Bind(wx.EVT_MENU, self.on_menu_bar, id=wx.ID_ABOUT)
+
+    def on_menu_bar(self, event):
+        """
+        处理alt菜单的事件
+        """
+        menu_id = event.GetId()
+        if menu_id == wx.ID_OPEN:
+            self.open_image_file()
+        elif menu_id == wx.ID_ABOUT:
+            wx.MessageBox("版权所有 2025 FreeRUOK")
 
     def on_error(self, exc: Exception, is_fail: bool):
         wx.MessageBox(str(exc), "出错了", wx.ICON_ERROR)
@@ -166,6 +221,15 @@ class MainFrame(wx.Frame):
             first_title = ""
 
         self.SetTitle(f"{first_title}{last_title}")
+
+    def set_global_focus_(self):
+        """
+        在全局范围内让当前窗口聚焦系统焦点
+        """
+
+        if not self.IsActive():
+            if result_window := gw.getWindowsWithTitle(self.Title):
+                result_window[0].activate()
 
     def on_system_prompt_change(self, event):
         """

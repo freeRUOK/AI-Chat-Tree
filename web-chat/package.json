@@ -1,6 +1,6 @@
 {
   "name": "web-chat",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "给ai-chat-tree提供web前端， 跨设备使用服务",
   "scripts": {
     "fmt": "prettier --write .",
@@ -32,6 +32,7 @@
     "howler": "^2.2.4",
     "marked": "^15.0.7",
     "socket.io-client": "^4.7.5",
+    "ua-parser-js": "^2.0.3",
     "vue": "^3.4.29"
   }
 }

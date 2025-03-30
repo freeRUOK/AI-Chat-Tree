@@ -1,4 +1,4 @@
-// filename: App.vue
+// filename: audio-player.js
 // Author: FreeRUOK <2651688427@qq.com>
 // Date: 2025-03
 //AI - Chat - Tree的web前端;

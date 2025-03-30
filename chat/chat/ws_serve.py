@@ -16,7 +16,7 @@ from config import Config
 from consts import ContentTag
 from application import Application
 from model import ModelResult
-from util import debug_logger
+from util import debug_logger, ImageHandler
 from text_to_speech import TextToSpeechOption
 
 
@@ -27,6 +27,7 @@ class WSServe:
 
     def __init__(self):
         self.serve_status = ServeStatus()
+        self._image_handler = ImageHandler()
         self.application: Application | None = None
         self.app = Flask(__name__)
         self.app.config["SECRET_KEY"] = "secret!"
@@ -95,9 +96,19 @@ class WSServe:
             处理socketio的chat自定义事件
             """
             debug_logger.info(f"Received message: {message}")
-            msg = message["text"].strip()
+            msg = message.get("text", "简明扼要的描述一下这个图片")
+            image_buf = message.get("image")
+            if image_buf:
+                self._image_handler.read_image_file(image_buf)
+
             if msg:
-                self.serve_status.message_queue.put((msg, None))
+                self.serve_status.message_queue.put(
+                    (
+                        msg.strip() or "这个图片里是什么？",
+                        self._image_handler.to_base64(),
+                    )
+                )
+                self._image_handler.close_current_image()
             else:
                 self.sio.emit("chat", {"text": "Empty Input Message."})
 

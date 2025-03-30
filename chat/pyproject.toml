@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "chat"
-version = "0.1.0"
+version = "1.1.1"
 description = "一个简单的cli gui和webAI聊天机器人程序"
 authors = ["'FreeRUOK' <'2651688427@qq.com'>"]
 license = "MIT"
@@ -26,6 +26,7 @@ flask-socketio = "^5.5.1"
 pillow = "^11.1.0"
 pyautogui = "^0.9.54"
 pygetwindow = "^0.0.9"
+opencv-python = "^4.11.0.86"
 
 
 [tool.poetry.group.dev.dependencies]

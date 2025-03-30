@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import os
 from PIL import Image
+import cv2
 import pyautogui
 import pygetwindow as gw  # type: ignore
 from loguru import logger
@@ -156,62 +157,86 @@ def input_handler(user_message: str) -> tuple[ContentTag, str | None]:
     return (ContentTag.empty, None)
 
 
-def image_to_base64(image_: Image.Image | None) -> str | None:
+class ImageHandler:
     """
-    把图片转换到base64字符串
+    简单处理图片
     """
-    if image_ is None:
-        return None
 
-    try:
-        buffer = BytesIO()
-        image_.save(buffer, format="JPEG")
-        img_bytes = buffer.getvalue()
-        base64_str = base64.b64encode(img_bytes).decode(encoding="UTF-8")
-        return base64_str
-    except Exception as e:
-        debug_log(e)
+    def __init__(self):
+        """
+        初始化
+        """
+        self._image: Image.Image | None = None
 
-    return None
+    def close_current_image(self):
+        """
+        关闭当前Image.Image对象
+        """
+        if self._image is not None:
+            self._image.close()
+            self._image = None
 
+    def to_base64(self) -> str | None:
+        """
+        把图片转换到base64字符串
+        """
+        if self._image is None:
+            return None
 
-def read_image_file(image_path: str) -> Image.Image | None:
-    """
-    打开图片文件
-    """
-    try:
-        with Image.open(image_path) as image:
-            return image
-    except Exception as e:
-        debug_log(e)
-
-    return None
-
-
-def capture_full_screen() -> Image.Image | None:
-    """
-    全屏截图
-    """
-    try:
-        return pyautogui.screenshot()
-    except Exception as e:
-        debug_log(e)
+        try:
+            buffer = BytesIO()
+            self._image.save(buffer, format="JPEG")
+            img_bytes = buffer.getvalue()
+            base64_str = base64.b64encode(img_bytes).decode(encoding="UTF-8")
+            return base64_str
+        except Exception as e:
+            debug_log(e)
 
         return None
 
+    def read_image_file(self, image_data: str | bytes):
+        """
+        打开图片文件
+        """
+        try:
+            if isinstance(image_data, bytes):
+                self._image = Image.open(BytesIO(image_data))
+            else:
+                self._image = Image.open(image_data)
 
-def capture_foreground_window() -> Image.Image | None:
-    """
-    给当前前台窗口截屏
-    """
-    window = gw.getActiveWindow()
-    if window is None:
-        return None
+        except Exception as e:
+            debug_log(e)
 
-    x, y, width, height = window.left, window.top, window.width, window.height
-    try:
-        return pyautogui.screenshot(region=(x, y, width, height))
-    except Exception as e:
-        debug_log(e)
+    def capture_screen(self, is_full_screen: bool = False):
+        """
+        对当前活动的窗口截屏
+        is_full_screen: bool, 是否全屏截图默认活动窗口
+        """
+        try:
+            region = None
+            if not is_full_screen:
+                if window := gw.getActiveWindow():
+                    region = (window.left, window.top, window.width, window.height)
 
-    return None
+            self._image = pyautogui.screenshot(region=region)
+        except Exception as e:
+            debug_log(e)
+
+    def capture(self):
+        """
+        调用设备的默认镜头拍照
+        调用该函数注意隐私安全
+        """
+        try:
+            capture = cv2.VideoCapture(0)
+            if not capture.isOpened():
+                raise ValueError("Open Capture Fail")
+            ret, frame = capture.read()
+            if ret is None:
+                raise ValueError("Read Image Frame Fail.")
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            self._image = Image.fromarray(frame_rgb)
+            capture.release()
+
+        except ValueError as e:
+            debug_log(e)
