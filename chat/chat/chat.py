@@ -7,7 +7,7 @@
 # 机器和人通过这个类相互交流
 import threading
 from copy import deepcopy
-from typing import Callable, Any
+from typing import Callable
 from datetime import datetime, timedelta
 import ollama
 from openai import APIStatusError, RateLimitError, APIConnectionError
@@ -16,7 +16,7 @@ from model_tools import create_or_switch_model
 from util import debug_log, input_handler
 
 from model import Model, ModelResult, ModelOutput
-from consts import ContentTag
+from consts import ContentTag, _format, _has_image, _is_request
 
 
 class Chat:
@@ -58,18 +58,51 @@ class Chat:
             },
         ]
 
+    def _append_message(
+        self, user_message: str, base64_image: str | None = None
+    ) -> bool:
+        """
+        在会话队列当中插入新的用户消息
+        :param user_message: 用户发送给LLM的文本消息
+        :type user_message: str
+        :param base64_image: base64编码后的图片
+        :type base64_image: str | None
+        成功添加消息返回True， 否则返回False
+        """
+        new_message = {}
+        if self._model.is_online:
+            content = [{"type": "text", "text": user_message}]
+            if base64_image:
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{base64_image}"},
+                    }
+                )
+            new_message = {"role": "user", "content": content}
+        else:
+            msg = {"role": "user", "content": user_message}
+            if base64_image:
+                msg["images"] = [
+                    base64_image,
+                ]
+
+            new_message = msg
+
+        if new_message:
+            new_message[_format] = "openai" if self._model.is_online else "ollama"
+            new_message[_has_image] = base64_image is not None
+            new_message[_is_request] = True
+            self._messages.append(new_message)
+            return True
+
+        return False
+
     def send_message(self, user_message: str, base64_image: str | None = None):
         """
         发送聊天消息， 处理AI的回复消息
         """
-        new_message: dict[str, Any] = {"role": "user", "content": user_message}
-        if base64_image is not None:
-            new_message["images"] = [
-                base64_image,
-            ]
-
-        self._messages.append(new_message)
-
+        self._append_message(user_message=user_message, base64_image=base64_image)
         self._model = self._first_model
         self._model_result_tag = ContentTag.chunk
         # 如果错误可以恢复的话最多3次重试
@@ -181,6 +214,26 @@ class Chat:
 
         return ModelResult(delta.content, self._model_result_tag)
 
+    def _clear_message(self):
+        """
+        Docstring for _clear_message
+        调用结束之后清理额外的数据， 统一格式
+        """
+        index = -1
+        target = self._messages[index]
+        while _is_request not in target and index >= 0:
+            target = self._messages[index]
+            index -= 1
+
+        if _is_request not in target:
+            return
+
+        if target[_format] == "openai":
+            target["content"] = target["content"][0]["text"]
+
+        if target[_has_image]:
+            target.pop("images")
+
     def _chunk_completing_handler(self, last_chunk):
         """
         处理最后一个消息块
@@ -188,6 +241,7 @@ class Chat:
         在本地ollama后端里没有返回这些统计信息
         """
         self._show_running_info(last_chunk, datetime.now() - self._start_time)
+        self._clear_message()
         self._messages.append({"role": "assistant", "content": self._content})
         self._model_output.output_done(messages=self._messages)
         self._reasoning_content = ""
@@ -202,16 +256,17 @@ class Chat:
             completion_tokens = chunk.eval_count
             token_speed = completion_tokens / running_td.total_seconds()
             print(f"Token Speed: {token_speed}, completion token: {completion_tokens}")
-        else:
+        elif chunk.usage is not None:
             usage = chunk.usage
             token_speed = usage.completion_tokens / running_td.total_seconds()
             prompt_tokens = usage.prompt_tokens
             completion_tokens = usage.completion_tokens
             total_tokens = usage.total_tokens
-
             print(
                 f"Token speed: {token_speed}, promptTokens: {prompt_tokens}, Completion Tokens: {completion_tokens}, totalTokens: {total_tokens}"
             )
+        else:
+            print(" Token statistics are currently unavailable.")
 
     def run(self, input_callback: Callable[[], tuple[str, str | None]] | None = None):
         """

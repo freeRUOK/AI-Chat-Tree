@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "chat"
-version = "1.1.1"
+version = "0.1.0"
 description = "一个简单的cli gui和webAI聊天机器人程序"
 authors = ["'FreeRUOK' <'2651688427@qq.com'>"]
 license = "MIT"
@@ -10,7 +10,7 @@ readme = "README.md"
 python = "^3.11"
 typer = "^0.15.1"
 openai = "^1.61.0"
-ollama = "^0.4.7"
+ollama = "^0.6.1"
 pydub = "^0.25.1"
 simpleaudio = "^1.0.4"
 typing-extensions = "^4.12.2"

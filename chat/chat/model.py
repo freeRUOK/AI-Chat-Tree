@@ -87,7 +87,8 @@ class Model:
 
         self.group_name = group_name
         self.api_key = api_key
-        self.base_url = base_url
+        self.base_url = base_url if "ollama.com" not in base_url else f"{base_url}/v1"
+
         self.sub_models = validate_values(sub_models)
 
         self.max_tokens = max_tokens

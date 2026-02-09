@@ -34,3 +34,9 @@ class ContentTag(str, Enum):
     reasoning_content = "reasoning_content"
     model_status = "model_status"
     all_model = "all_model"
+
+
+# 一些元数据的常量定义
+_format = "_format"
+_has_image = "_has_image"
+_is_request = "_is_request"

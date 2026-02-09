@@ -176,25 +176,30 @@ class Application(threading.Thread):
                 else:
                     print(f"错误： {e}")
 
-    def load_models(self) -> list:
+    def _load_ollama_models(self, is_online: bool) -> dict:
         """
-        获取配置文件里的和本地ollama的模型元数据
+        获取ollama提供的所有可用的模型
+        如果 is_online == True 则尝试获取ollama云端模型
         """
-        if host := self._config.get("usage.ollama_host"):
+        if is_online:
+            ollama_host = "https://ollama.com"
+        elif host := self._config.get("usage.ollama_host"):
             ollama_host = host
         else:
             ollama_host = "http://127.0.0.1:11434"
         ollama_models = {
-            "group_name": "ollama",
+            "group_name": "ollama_local" if is_online else "ollama_cloud",
             "show_reasoning": True,
-            "is_online": False,
+            "is_online": is_online,
             "base_url": ollama_host,
-            "api_key": "ollama",
+            "api_key": self._config.get("usage.ollama_api_key"),
         }
         try:
             # ollama没有运行或者没有安装， 所以这里需要提醒用户
             ollama_sub_models = [
-                item.model for item in ollama.Client(host=ollama_host).list().models
+                item.model
+                for item in ollama.Client(host=ollama_host).list().models
+                if item.model and "cloud" not in item.model
             ]
         except ollama.ResponseError as e:
             ollama_sub_models = []
@@ -210,11 +215,21 @@ class Application(threading.Thread):
         else:
             ollama_models = {}
 
+        return ollama_models
+
+    def load_models(self) -> list:
+        """
+        获取配置文件里的和本地ollama的模型元数据
+        :param self: Description
+        :return: 返回所有的ollama模型
+        :rtype: list
+        """
         models = []
         if result := self._config.get("models"):
             models = result
-        if ollama_models:
-            models.append(ollama_models)
+
+        models.append(self._load_ollama_models(is_online=True))
+        models.append(self._load_ollama_models(is_online=False))
 
         return models
 
