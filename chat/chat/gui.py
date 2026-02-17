@@ -31,6 +31,7 @@ class MainFrame(wx.Frame):
         super().__init__(parent=None, title="AI Chat Tree", size=(1200, 900))
 
         self.status = FrameStatus()
+        self.application: Application | None = None
         self._image_handler = ImageHandler()
 
         self.panel = wx.Panel(self)
@@ -94,12 +95,17 @@ class MainFrame(wx.Frame):
         self.capture_hot_key_id = wx.NewIdRef()
         if not self.register_hot_key():
             wx.MessageBox(
-                "请检查 ctrl+shift+f1 和 ctrl+shift+f2 是否被占用。",
+                "请检查 ctrl+shift+f1 到 ctrl+shift+f4 是否被占用。",
                 "注册截屏热键热键失败",
                 wx.ICON_ERROR,
             )
         self.sound_player = get_sound_player()
         self.new_menu_bar()
+        self.record_hotkey = wx.NewIdRef()
+        if self.RegisterHotKey(
+            self.record_hotkey, wx.MOD_ALT | wx.MOD_SHIFT, wx.WXK_F5
+        ):
+            self.Bind(wx.EVT_HOTKEY, self.on_record, id=self.record_hotkey)
 
     def register_hot_key(self) -> bool:
         """
@@ -172,6 +178,16 @@ class MainFrame(wx.Frame):
             wx.MessageBox("获取图片失败")
 
         self._image_handler.close_current_image()
+
+    def on_record(self, event):
+        """
+        录音事件处理函数
+        """
+        if self.application.voice_input_manager._speech_to_text.is_recording():
+            self.application.voice_input_manager.end_voice_input()
+            self.create_message_tree_element("语音输入的内容： ")
+        else:
+            self.application.voice_input_manager.begin_voice_input()
 
     def new_menu_bar(self):
         """
@@ -481,6 +497,7 @@ if __name__ == "__main__":
 
         frame.load_models_status(application=application)
         application.start()
+        frame.application = application
 
         frame.Show()
         app.MainLoop()

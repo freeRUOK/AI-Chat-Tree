@@ -112,7 +112,6 @@ class VoiceInputManager:
                 return
 
             self._speech_to_text.end()
-            self._sound_player.play(name="voice-done", play_mode=PlayMode.ones_async)
             self._auto_stop_timer = None
 
     def begin_voice_input(self) -> bool:
@@ -124,7 +123,7 @@ class VoiceInputManager:
         with self._lock:
             if self._speech_to_text.is_recording():
                 return False
-
+            self._sound_player.play(name="wake", play_mode=PlayMode.ones_async)
         return self._speech_to_text.begin()
 
     def end_voice_input(self) -> bool:
@@ -133,13 +132,12 @@ class VoiceInputManager:
         :return: 成功与否
         :rtype: bool
         """
+        self._sound_player.play(name="voice-done", play_mode=PlayMode.ones_async)
         return self._speech_to_text.end()
 
     def on_wake(self):
         """
-        Docstring for on_wake
         唤醒成功后调用， 发送语音识别信号成功之后开始定时， 定时结束之后自动结束语音识别
         """
-        self._sound_player.play(name="wake", play_mode=PlayMode.ones_async)
         if self._speech_to_text.begin():
             self._start_timer()
