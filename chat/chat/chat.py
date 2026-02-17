@@ -13,7 +13,7 @@ import ollama
 from openai import APIStatusError, RateLimitError, APIConnectionError
 from httpx import ReadTimeout as OpenAIReadTimeout
 from model_tools import create_or_switch_model
-from util import debug_log, input_handler
+from util import debug_log
 
 from model import Model, ModelResult, ModelOutput
 from consts import ContentTag, _format, _has_image, _is_request
@@ -86,7 +86,6 @@ class Chat:
                 msg["images"] = [
                     base64_image,
                 ]
-
             new_message = msg
 
         if new_message:
@@ -102,9 +101,9 @@ class Chat:
         """
         发送聊天消息， 处理AI的回复消息
         """
-        self._append_message(user_message=user_message, base64_image=base64_image)
         self._model = self._first_model
         self._model_result_tag = ContentTag.chunk
+        self._append_message(user_message=user_message, base64_image=base64_image)
         # 如果错误可以恢复的话最多3次重试
         for i in range(3):
             try:
@@ -216,7 +215,6 @@ class Chat:
 
     def _clear_message(self):
         """
-        Docstring for _clear_message
         调用结束之后清理额外的数据， 统一格式
         """
         index = -1
@@ -231,7 +229,7 @@ class Chat:
         if target[_format] == "openai":
             target["content"] = target["content"][0]["text"]
 
-        if target[_has_image]:
+        if target[_has_image] and "images" in target:
             target.pop("images")
 
     def _chunk_completing_handler(self, last_chunk):
@@ -284,35 +282,7 @@ class Chat:
                 )
 
         else:
-            self.default_input()
-
-    def default_input(self):
-        """
-        默认从命令行获取用户的输入
-        """
-        print("欢迎使用AI Chat， 键入文字开始聊天， 键入 /h 获取更多帮助。")
-        while True:
-            user_message = input(f"{self._model.current_model} >> ").strip()
-
-            if user_message[0] == "/":
-                result = input_handler(user_message)
-                match result[0]:
-                    case ContentTag.end:
-                        break
-                    case ContentTag.empty | ContentTag.error:
-                        print("错误输入或空输入， 再试一次")
-                        continue
-                    case ContentTag.file | ContentTag.clipboard | ContentTag.multi_line:
-                        if result[1] is not None:
-                            print(
-                                f"{result[0].value}\n----------\n{result[1]}\n-------------------"
-                            )
-                            user_message = result[1]
-                        else:
-                            print("没有获取有效内容。")
-                            continue
-
-            self.send_message(user_message=user_message)
+            raise RuntimeError("InputCallback Callback Is None.")
 
     def set_status(self):
         """

@@ -16,6 +16,7 @@ from model import ModelOutput, Model, ModelResult, ModelInfo
 from model_tools import create_or_switch_model
 from util import debug_log, DEBUG_MODE
 from text_to_speech import TextToSpeechOption
+from voice_input_manager import VoiceInputManager
 
 
 class Application(threading.Thread):
@@ -36,11 +37,12 @@ class Application(threading.Thread):
         chunk_callback: Callable[[ModelResult], None] | None = None,
         audio_callback: Callable[[BytesIO], None] | None = None,
         finish_callback: Callable[[list], None] | None = None,
+        voice_input_callback: Callable[[str], None] | None = None,
     ):
         """
         初始化
         """
-        super().__init__()
+        super().__init__(daemon=True)
         self._config = config
         self._model_name = model_name
         self._second_model_name = second_model_name
@@ -57,11 +59,15 @@ class Application(threading.Thread):
         self._models = self.load_models()
         self._chat: Chat
         self._is_begin = False
+        self.voice_input_manager = VoiceInputManager(
+            config=self._config, stt_callback=voice_input_callback
+        )
 
     def __enter__(self):
         """
         with自动管理上下文， 语句块的开头部分运行
         """
+        self.voice_input_manager.start()
         return self
 
     def __exit__(self, exc_typ, exc_val, exc_tb):
@@ -69,6 +75,7 @@ class Application(threading.Thread):
         with自动管理上下文， 语句块的结束部分运行
         这里可以保存状态或清理资源
         """
+        self.voice_input_manager.stop()
         if exc_typ:
             debug_log(exc_val)
 
@@ -197,7 +204,7 @@ class Application(threading.Thread):
         try:
             # ollama没有运行或者没有安装， 所以这里需要提醒用户
             ollama_sub_models = [
-                item.model
+                f"{item.model}{'-cloud' if is_online else ''}"
                 for item in ollama.Client(host=ollama_host).list().models
                 if item.model and "cloud" not in item.model
             ]

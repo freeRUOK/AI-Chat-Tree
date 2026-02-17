@@ -22,13 +22,18 @@ class PlayMode(str, Enum):
     ones_sync = "ones_sync"
 
 
-class SoundPlayer(threading.Thread):
+class _SoundPlayer(threading.Thread):
     """
     在独立线程实现一个简单音效播放器
+    请不要直接实例化， 应当调用get_sound_player函数
     """
 
     def __init__(self):
-        super().__init__()
+        """
+        初始化音效播放器
+        """
+
+        super().__init__(daemon=True)
         self._lock = threading.Lock()
         self.queue: Queue = Queue()
         self._back_play_mode = PlayMode.ones_async
@@ -48,6 +53,9 @@ class SoundPlayer(threading.Thread):
         """
         播放指定的音效
         """
+        if not self.is_alive():
+            raise RuntimeError("SoundPlayer Thread Not Started. Call 'start'.")
+
         if name in self._sounds:
             self.queue.put(
                 (
@@ -107,3 +115,22 @@ class SoundPlayer(threading.Thread):
                 continue
 
         clear_queue(self.queue)
+
+
+_instance: _SoundPlayer | None = None
+_instance_lock = threading.Lock()
+
+
+def get_sound_player() -> _SoundPlayer:
+    """
+    创建单例SoundPlayer实例
+    首次创建并启动后返回， 二次调用直接返回已有实例
+    """
+    global _instance
+    if _instance is None:
+        with _instance_lock:
+            if _instance is None:
+                _instance = _SoundPlayer()
+                _instance.start()
+
+    return _instance

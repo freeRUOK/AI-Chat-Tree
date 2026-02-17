@@ -15,7 +15,7 @@ from model import ModelResult
 from config import Config
 from application import Application
 from consts import ContentTag
-from sound_player import PlayMode, SoundPlayer
+from sound_player import PlayMode, get_sound_player
 from util import clear_queue, ImageHandler
 from gui_consts import MENU_ITEM_SET_FIRST_MODEL, MENU_ITEM_SET_SECOND_MODEL
 from data_status import DataStatus as FrameStatus
@@ -98,8 +98,7 @@ class MainFrame(wx.Frame):
                 "注册截屏热键热键失败",
                 wx.ICON_ERROR,
             )
-        self.sound_player = SoundPlayer()
-        self.sound_player.start()
+        self.sound_player = get_sound_player()
         self.new_menu_bar()
 
     def register_hot_key(self) -> bool:
@@ -476,10 +475,10 @@ if __name__ == "__main__":
                 input_callback=frame.status.message_queue.get,
                 chunk_callback=frame.on_chunk,
                 finish_callback=frame.on_finish,
+                voice_input_callback=frame.status.on_speech_result,
             )
         )
 
-        application.daemon = True
         frame.load_models_status(application=application)
         application.start()
 

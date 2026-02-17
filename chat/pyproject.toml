@@ -27,6 +27,9 @@ pillow = "^11.1.0"
 pyautogui = "^0.9.54"
 pygetwindow = "^0.0.9"
 opencv-python = "^4.11.0.86"
+vosk = "^0.3.45"
+sounddevice = "^0.5.5"
+pvporcupine = "^4.0.2"
 
 
 [tool.poetry.group.dev.dependencies]

@@ -5,16 +5,69 @@
 # * description: 一个简单的AI LLM聊天程序
 # 主要实现了cli接口
 import os
+import msvcrt
 from contextlib import ExitStack
 from typing_extensions import Annotated
 import typer
 import yaml
 from config import Config
-from consts import CONFIG_PATH, default_system_prompt
+from consts import CONFIG_PATH, default_system_prompt, ContentTag
 from application import Application
 from ws_serve import WSServe
+from util import input_handler, clear_queue
 from util import DEBUG_MODE, debug_log
 from text_to_speech import TextToSpeechOption
+from data_status import DataStatus as CLIStatus
+
+
+def cli_input(application: Application, status: CLIStatus):
+    """
+    默认从命令行获取用户的输入
+    """
+    print("欢迎使用AI Chat， 键入文字开始聊天， 键入 /h 获取更多帮助。")
+    while True:
+        user_message = input("Enter Text >> ").strip()
+
+        if user_message[0] == "/":
+            result = input_handler(user_message)
+            match result[0]:
+                case ContentTag.speech:
+                    application.voice_input_manager.begin_voice_input()
+                    msvcrt.getch()
+                    application.voice_input_manager.end_voice_input()
+                    continue
+
+                case ContentTag.end:
+                    break
+                case ContentTag.empty | ContentTag.error:
+                    print("错误输入或空输入， 再试一次")
+                    continue
+                case (
+                    ContentTag.file
+                    | ContentTag.clipboard
+                    | ContentTag.multi_line
+                    | ContentTag.help
+                ):
+                    if result[1] is not None:
+                        print(
+                            f"{result[0].value}\n<{'-' * 40}>\n{result[1]}\n<{'-' * 40}>"
+                        )
+                        if result[0] != ContentTag.help:
+                            user_message = result[1]
+                        else:
+                            continue
+
+                    else:
+                        print("没有获取有效内容。")
+                        continue
+
+        status.message_queue.put(
+            (
+                user_message,
+                None,
+            )
+        )
+
 
 # 创建typer app， 并且在创建config_app， 最后把config_app作为app的子命令
 app = typer.Typer()
@@ -30,19 +83,31 @@ def chat(
         str, typer.Option("--system-prompt", "-sp")
     ] = default_system_prompt,
 ):
+    status = CLIStatus()
     # 按照chat的默认方式运行
-    with ExitStack() as stack:
-        config = stack.enter_context(Config())
-        application = stack.enter_context(
-            Application(
-                config=config,
-                model_name=model_name,
-                second_model_name=second_model_name,
-                system_prompt=system_prompt,
-                text_to_speech_option=TextToSpeechOption.play,
+    application: Application | None = None
+    try:
+        with ExitStack() as stack:
+            config = stack.enter_context(Config())
+            application = stack.enter_context(
+                Application(
+                    config=config,
+                    model_name=model_name,
+                    second_model_name=second_model_name,
+                    system_prompt=system_prompt,
+                    text_to_speech_option=TextToSpeechOption.play,
+                    input_callback=status.message_queue.get,
+                    voice_input_callback=status.on_speech_result,
+                )
             )
-        )
-        application.run()
+            application.start()
+            cli_input(application=application, status=status)
+    except Exception as e:
+        raise e
+    finally:
+        clear_queue(status.message_queue)
+        if application:
+            application.join()
 
 
 @config_app.command("tts")

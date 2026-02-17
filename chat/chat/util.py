@@ -153,6 +153,8 @@ def input_handler(user_message: str) -> tuple[ContentTag, str | None]:
                 ContentTag.help,
                 read_file_text(filename="readMe.md"),
             )
+        case "/v" | "/V":
+            return (ContentTag.speech, None)
 
     return (ContentTag.empty, None)
 

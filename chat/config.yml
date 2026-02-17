@@ -15,3 +15,8 @@ text_to_speech:
   voice: Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)
   rate: +100%
   volume: +20%
+voice_input:
+  porcupine_access_key: my-key
+  porcupine_model_path: C:\Users\free\.models\porcupine\porcupine_params_zh.pv
+  porcupine_wake_zh_model_path: C:\Users\free\.models\porcupine\黑鹰_zh_windows_v4_0_0\黑鹰_zh_windows_v4_0_0.ppn
+  vosk_model_path: C:\Users\free\.models\vosk\vosk-model-small-cn-0.22

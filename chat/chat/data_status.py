@@ -73,3 +73,19 @@ class DataStatus:
             return True
         except IndexError:
             return False
+
+    def on_speech_result(self, result_text: str):
+        """
+        语音输入结束后调用
+        :param result_text: 语音识别到的文本内容
+        :type result_text: str
+        """
+        result_text = result_text.strip()
+        if result_text:
+            self.current_user_input = result_text
+            self.message_queue.put(
+                (
+                    result_text,
+                    None,
+                )
+            )
