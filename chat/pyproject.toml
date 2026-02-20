@@ -30,6 +30,10 @@ opencv-python = "^4.11.0.86"
 vosk = "^0.3.45"
 sounddevice = "^0.5.5"
 pvporcupine = "^4.0.2"
+baidusearch = "^1.0.3"
+requests = "^2.32.5"
+ddgs = "^9.10.0"
+pydantic = "^2.12.5"
 
 
 [tool.poetry.group.dev.dependencies]

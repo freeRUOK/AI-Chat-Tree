@@ -10,6 +10,7 @@ from io import BytesIO
 import base64
 from pathlib import Path
 import re
+import socket
 import os
 from PIL import Image
 import cv2
@@ -157,6 +158,26 @@ def input_handler(user_message: str) -> tuple[ContentTag, str | None]:
             return (ContentTag.speech, None)
 
     return (ContentTag.empty, None)
+
+
+def first_online_host(addresss: tuple[str, int], timeout: float = 0.3) -> str | None:
+    """
+    返回第一个可用的主机名和端口， 把优先使用的主机名放到靠前的位置， 备用主机名放到靠后的位置
+    :param addresss: 主机名和端口列表
+    :type addresss: tuple[str, int]
+    :param timeout: 超时（秒）
+    :type timeout: float
+    :return: 返回第一个能够成功连接的主机名和端口
+    :rtype: str | None
+    """
+    for address in addresss:
+        try:
+            with socket.create_connection(address=address, timeout=timeout):
+                return address
+        except (ConnectionRefusedError, OSError, socket.timeout):
+            continue
+
+    return None
 
 
 class ImageHandler:
