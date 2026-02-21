@@ -38,6 +38,7 @@ class Application(threading.Thread):
         audio_callback: Callable[[BytesIO], None] | None = None,
         finish_callback: Callable[[list], None] | None = None,
         voice_input_callback: Callable[[str], None] | None = None,
+        enable_tools: bool = True,
     ):
         """
         初始化
@@ -62,6 +63,7 @@ class Application(threading.Thread):
         self.voice_input_manager = VoiceInputManager(
             config=self._config, stt_callback=voice_input_callback
         )
+        self._enable_tools = enable_tools
 
     def __enter__(self):
         """
@@ -149,6 +151,7 @@ class Application(threading.Thread):
             second_model=second_model,
             system_prompt=system_prompt,
             begin_callback=self._begin_callback,
+            enable_tools=self._enable_tools,
         )
 
     def run(self):

@@ -5,18 +5,22 @@
 # * description: 一个简单的AI LLM聊天程序
 # Chat类是核心， 给模型发送用户的消息， 从模型接受消息
 # 机器和人通过这个类相互交流
+from pprint import pprint
 import threading
 from copy import deepcopy
 from typing import Callable
 from datetime import datetime, timedelta
+import json
 import ollama
 from openai import APIStatusError, RateLimitError, APIConnectionError
 from httpx import ReadTimeout as OpenAIReadTimeout
 from model_tools import create_or_switch_model
-from util import debug_log
+from util import debug_log, DEBUG_MODE
 
 from model import Model, ModelResult, ModelOutput
 from consts import ContentTag, _format, _has_image, _is_request
+from tools import get_tool_registry
+from tools.result import Result
 
 
 class Chat:
@@ -32,6 +36,7 @@ class Chat:
         second_model: Model | None = None,
         system_prompt: str = "你是一个乐于助人的AI助手， 性格和网络喷子差不多， 批评用户毫无手软， 不过说出的话总是让人发人深省",
         begin_callback: Callable[[], dict | None] | None = None,
+        enable_tools: bool = True,
     ):
         """
         初始化Chat， 作为中间人准备好模型的所有方面
@@ -57,6 +62,9 @@ class Chat:
                 "content": system_prompt,
             },
         ]
+        self._enable_tools = enable_tools
+        self._tool_registry = get_tool_registry() if self._enable_tools else None
+        self._pending_tool_calls = []
 
     def _append_message(
         self, user_message: str, base64_image: str | None = None
@@ -107,12 +115,20 @@ class Chat:
         # 如果错误可以恢复的话最多3次重试
         for i in range(3):
             try:
-                response = self._model.chat(messages=self._messages)
+                tools = (
+                    self._tool_registry.to_ollama_tools()
+                    if self._enable_tools
+                    else None
+                )
+                response = self._model.chat(messages=self._messages, tools=tools)
 
                 self._start_time = datetime.now()
                 # 处理流逝返回的消息块
-                for chunk in response:
-                    self._chunk_handler(chunk=chunk)
+                tool_call_needed = self._stream_handler(response)
+                if tool_call_needed:
+                    self._tool_call_loop()
+                else:
+                    break
 
                 break
             except (
@@ -160,35 +176,53 @@ class Chat:
 
         return False
 
-    def _chunk_handler(self, chunk):
+    def _stream_handler(self, response) -> bool:
         """
         处理每个流逝返回的消息块
         """
-        if self._model.is_online:
-            delta = chunk.choices[0].delta
-            finish_reason = chunk.choices[0].finish_reason
-        else:
-            delta = chunk.message
-            finish_reason = chunk.done_reason
+        for chunk in response:
+            if self._model.is_online:
+                delta = chunk.choices[0].delta
+                finish_reason = chunk.choices[0].finish_reason
+            else:
+                delta = chunk.message
+                finish_reason = chunk.done_reason
 
-        model_result = self._delta_handler(delta=delta)
-        model_result.model_name = chunk.model
+            if (not self._model.is_online) and "tool_calls" in delta:
+                for tc in delta.tool_calls:
+                    self._pending_tool_calls.append(
+                        {
+                            "id": tc.id
+                            if "id" in tc
+                            else f"call_{len(self._pending_tool_calls)}",
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        }
+                    )
 
-        self._model_output.output_chunk(
-            model_result=deepcopy(
-                model_result
-            ),  #  防止在其他地方意外修改， 这里直接拷贝， 在这里我实际吃过亏
-            show_reasoning=self._model.show_reasoning,
-            finish_reason=finish_reason,
-        )
+            if delta.content is None:
+                delta.content = ""
 
-        if model_result.tag == ContentTag.reasoning_content:
-            self._reasoning_content += model_result.content
-        else:
-            self._content += model_result.content
+            model_result = self._delta_handler(delta=delta)
+            model_result.model_name = chunk.model
 
-        if finish_reason == "stop":
-            self._chunk_completing_handler(last_chunk=chunk)
+            self._model_output.output_chunk(
+                model_result=deepcopy(
+                    model_result
+                ),  #  防止在其他地方意外修改， 这里直接拷贝， 在这里我实际吃过亏
+                show_reasoning=self._model.show_reasoning,
+                finish_reason=finish_reason,
+            )
+
+            if model_result.tag == ContentTag.reasoning_content:
+                self._reasoning_content += model_result.content
+            else:
+                self._content += model_result.content
+
+            if finish_reason == "stop":
+                self._chunk_completing_handler(last_chunk=chunk)
+
+        return len(self._pending_tool_calls) > 0
 
     def _delta_handler(self, delta) -> ModelResult:
         """
@@ -212,6 +246,49 @@ class Chat:
             delta.content = "\n"
 
         return ModelResult(delta.content, self._model_result_tag)
+
+    def _tool_call_loop(self):
+        """
+        工具调用循环
+        """
+        print(f"tc loop {len(self._pending_tool_calls)}")
+        while self._pending_tool_calls:
+            tool_call = self._pending_tool_calls.pop(0)
+            result: Result = self._tool_registry.execute(
+                name=tool_call["name"],
+                arguments=json.loads(tool_call["arguments"])
+                if isinstance(tool_call["arguments"], str)
+                else tool_call["arguments"],
+            )
+            if DEBUG_MODE and result.error:
+                raise result.error
+
+            tool_message = {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": tool_call["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tool_call["name"],
+                            "arguments": tool_call["arguments"],
+                        },
+                    }
+                ],
+            }
+            self._messages.append(tool_message)
+            tool_response = {
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": json.dumps(result.to_json(), ensure_ascii=False),
+            }
+            self._messages.append(tool_response)
+        tools = self._tool_registry.to_ollama_tools() if self._enable_tools else None
+        response = self._model.chat(messages=self._messages, tools=tools)
+        toll_call_needed = self._stream_handler(response=response)
+        if toll_call_needed:
+            self._tool_call_loop()
 
     def _clear_message(self):
         """

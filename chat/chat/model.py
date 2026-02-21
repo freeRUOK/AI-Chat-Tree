@@ -73,6 +73,7 @@ class Model:
         current_model: str | None = None,
         max_tokens: int = 5120,
         context_length: int = 131072,
+        tools: list[dict] | None = None,
     ):
         validate_values(
             [
@@ -109,22 +110,29 @@ class Model:
         else:
             self._ollamaClient = ollama.Client(host=self.base_url)
 
-    def chat(self, messages: list):
+        self.tools = tools or []
+
+    def chat(self, messages: list, tools: list[dict] | None = None):
         """
-        给模型发送消息
+        给模型发送消息， 支持工具调用
         """
         if self.current_model is None:
             raise ValueError("必须提供模型名称。")
 
+        active_tools = tools if tools is not None else self.tools
         if self.is_online:
             return self._openAIClient.chat.completions.create(
                 model=self.current_model,
                 messages=messages,
+                tools=active_tools,
                 stream=True,
             )
         else:
             return self._ollamaClient.chat(
-                model=self.current_model, messages=messages, stream=True
+                model=self.current_model,
+                messages=messages,
+                tools=active_tools,
+                stream=True,
             )
 
     def to_dict(

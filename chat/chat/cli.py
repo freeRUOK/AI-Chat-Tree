@@ -77,7 +77,7 @@ app.add_typer(config_app, name="config")
 
 @app.command()
 def chat(
-    model_name: Annotated[str, typer.Argument()] = "deepseek-reasoner",
+    model_name: Annotated[str, typer.Argument()] = "qwq",
     second_model_name: Annotated[str, typer.Argument()] = "deepseek-r1:14b",
     system_prompt: Annotated[
         str, typer.Option("--system-prompt", "-sp")
@@ -98,6 +98,7 @@ def chat(
                     text_to_speech_option=TextToSpeechOption.play,
                     input_callback=status.message_queue.get,
                     voice_input_callback=status.on_speech_result,
+                    enable_tools=True,
                 )
             )
             application.start()
@@ -106,8 +107,7 @@ def chat(
         raise e
     finally:
         clear_queue(status.message_queue)
-        if application:
-            application.join()
+        print("下次再见！")
 
 
 @config_app.command("tts")

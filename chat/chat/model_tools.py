@@ -7,6 +7,29 @@
 from model import Model
 
 
+class ToolCallAccumulator:
+    """
+    解决旧的OpenAI API流式输出tool_calls的问题
+    ollama API一次性输出工具调用的所有信息， 而OpenAI需要累积之后在调用工具
+    """
+
+    def __init__(self):
+        self._tool_calls: dict[int, dict] = {}
+
+    def add_chunk(self, toll_calls_chunk: list):
+        if not toll_calls_chunk:
+            return
+
+        for tc in toll_calls_chunk:
+            ids = getattr(tc, "index", 0)
+            if ids not in self._tool_calls:
+                self._tool_calls[ids] = {
+                    "id": getattr(tc, "id", None),
+                    "name": None,
+                    "arguments": None,
+                }
+
+
 def find_model_group_index(model_list: list, name: str | None = None) -> int:
     """
     根据子模型查询模型组的索引
