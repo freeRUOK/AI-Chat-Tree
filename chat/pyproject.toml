@@ -9,7 +9,6 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.11"
 typer = "^0.15.1"
-openai = "^1.61.0"
 ollama = "^0.6.1"
 pydub = "^0.25.1"
 simpleaudio = "^1.0.4"
@@ -34,6 +33,7 @@ baidusearch = "^1.0.3"
 requests = "^2.32.5"
 ddgs = "^9.10.0"
 pydantic = "^2.12.5"
+openai = "^2.21.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -43,6 +43,7 @@ types-pyyaml = "^6.0.12.20241230"
 types-flask-socketio = "^5.5.0.20241227"
 nuitka = "^2.6.8"
 types-pyautogui = "^0.9.3.20241230"
+bandit = "^1.9.3"
 
 [build-system]
 requires = ["poetry-core"]

@@ -77,7 +77,7 @@ app.add_typer(config_app, name="config")
 
 @app.command()
 def chat(
-    model_name: Annotated[str, typer.Argument()] = "qwq",
+    model_name: Annotated[str, typer.Argument()] = "deepseek-chat",
     second_model_name: Annotated[str, typer.Argument()] = "deepseek-r1:14b",
     system_prompt: Annotated[
         str, typer.Option("--system-prompt", "-sp")

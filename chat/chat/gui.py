@@ -492,6 +492,7 @@ if __name__ == "__main__":
                 chunk_callback=frame.on_chunk,
                 finish_callback=frame.on_finish,
                 voice_input_callback=frame.status.on_speech_result,
+                enable_tools=True,
             )
         )
 

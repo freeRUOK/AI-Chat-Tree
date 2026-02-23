@@ -4,6 +4,7 @@
 # * date： 2026-02
 # * description: 一个简单的AI LLM聊天程序
 # 定义工具调用执行结果
+import json
 
 
 class Result:
@@ -29,3 +30,6 @@ class Result:
         :rtype: dict[str, dict]
         """
         return {"error": str(self.error), "result": self.result}
+
+    def __repr__(self) -> str:
+        return json.dumps(self.to_json(), ensure_ascii=False)

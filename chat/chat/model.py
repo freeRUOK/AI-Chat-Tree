@@ -125,6 +125,7 @@ class Model:
                 model=self.current_model,
                 messages=messages,
                 tools=active_tools,
+                parallel_tool_calls=True,
                 stream=True,
             )
         else:

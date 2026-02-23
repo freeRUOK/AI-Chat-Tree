@@ -192,6 +192,7 @@ class WSServe:
                     chunk_callback=self.output_chunk,
                     audio_callback=self.output_audio,
                     finish_callback=self.output_finish,
+                    enable_tools=True,
                 )
             )
             if self.application:

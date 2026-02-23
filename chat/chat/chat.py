@@ -5,16 +5,14 @@
 # * description: 一个简单的AI LLM聊天程序
 # Chat类是核心， 给模型发送用户的消息， 从模型接受消息
 # 机器和人通过这个类相互交流
-from pprint import pprint
 import threading
 from copy import deepcopy
 from typing import Callable
 from datetime import datetime, timedelta
-import json
 import ollama
 from openai import APIStatusError, RateLimitError, APIConnectionError
 from httpx import ReadTimeout as OpenAIReadTimeout
-from model_tools import create_or_switch_model
+from model_tools import create_or_switch_model, ToolCallAccumulator
 from util import debug_log, DEBUG_MODE
 
 from model import Model, ModelResult, ModelOutput
@@ -64,7 +62,7 @@ class Chat:
         ]
         self._enable_tools = enable_tools
         self._tool_registry = get_tool_registry() if self._enable_tools else None
-        self._pending_tool_calls = []
+        self._tool_call_accumulator = ToolCallAccumulator()
 
     def _append_message(
         self, user_message: str, base64_image: str | None = None
@@ -124,9 +122,9 @@ class Chat:
 
                 self._start_time = datetime.now()
                 # 处理流逝返回的消息块
-                tool_call_needed = self._stream_handler(response)
-                if tool_call_needed:
-                    self._tool_call_loop()
+                pending_tool_calls = self._stream_handler(response)
+                if pending_tool_calls:
+                    self._tool_call_loop(pending_tool_calls, self._model.is_online)
                 else:
                     break
 
@@ -176,7 +174,7 @@ class Chat:
 
         return False
 
-    def _stream_handler(self, response) -> bool:
+    def _stream_handler(self, response) -> list:
         """
         处理每个流逝返回的消息块
         """
@@ -188,17 +186,10 @@ class Chat:
                 delta = chunk.message
                 finish_reason = chunk.done_reason
 
-            if (not self._model.is_online) and "tool_calls" in delta:
-                for tc in delta.tool_calls:
-                    self._pending_tool_calls.append(
-                        {
-                            "id": tc.id
-                            if "id" in tc
-                            else f"call_{len(self._pending_tool_calls)}",
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        }
-                    )
+            if delta.tool_calls is not None:
+                self._tool_call_accumulator.add_chunk(
+                    *delta.tool_calls, self._model.is_online
+                )
 
             if delta.content is None:
                 delta.content = ""
@@ -222,7 +213,7 @@ class Chat:
             if finish_reason == "stop":
                 self._chunk_completing_handler(last_chunk=chunk)
 
-        return len(self._pending_tool_calls) > 0
+        return self._tool_call_accumulator.all()
 
     def _delta_handler(self, delta) -> ModelResult:
         """
@@ -247,48 +238,93 @@ class Chat:
 
         return ModelResult(delta.content, self._model_result_tag)
 
-    def _tool_call_loop(self):
+    def _execute_all_tool_call(self, pending_tool_calls: list) -> list[Result]:
         """
-        工具调用循环
+        一次性执行所有工具调用
+        :param pending_tool_calls: 需要执行的工具列表
+        :type pending_tool_calls: list
+        :return: 返回工具执行结果
+        :rtype: list[Result]
         """
-        print(f"tc loop {len(self._pending_tool_calls)}")
-        while self._pending_tool_calls:
-            tool_call = self._pending_tool_calls.pop(0)
-            result: Result = self._tool_registry.execute(
-                name=tool_call["name"],
-                arguments=json.loads(tool_call["arguments"])
-                if isinstance(tool_call["arguments"], str)
-                else tool_call["arguments"],
+        tool_results = []
+        for tc in pending_tool_calls:
+            print(f"\n\nTool Calling: {tc['name']} Arguments: {tc['arguments']}")
+            result = self._tool_registry.execute(
+                name=tc["name"], arguments=tc["arguments"]
             )
+            print(f"Tool Calling: {tc['name']} Done. Return Result: {result}")
             if DEBUG_MODE and result.error:
                 raise result.error
 
-            tool_message = {
-                "role": "assistant",
-                "content": "",
-                "tool_calls": [
-                    {
-                        "id": tool_call["id"],
-                        "type": "function",
-                        "function": {
-                            "name": tool_call["name"],
-                            "arguments": tool_call["arguments"],
-                        },
-                    }
-                ],
-            }
+            tool_results.append({"tool_call": tc, "result": result})
+
+        return tool_results
+
+    def _build_openai_tool_calls(self, tool_calls: list) -> dict:
+        """
+        添加openai格式的工具调用消息
+        :param tool_calls: 工具调用列表
+        :type tool_calls: list
+        :return: OpenAI工具调用消息
+        :rtype: dict
+        """
+        tool_message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": tc["arguments_string"],
+                    },
+                }
+                for tc in tool_calls
+            ],
+        }
+
+        return tool_message
+
+    def _append_tool_calls(self, tool_results: list, is_online: bool):
+        """
+        把工具调用所有消息添加到聊天队列
+        :param tool_results: 工具调用结果
+        :type tool_results: list
+        :param is_online: 是否在线模型
+        :type is_online: bool
+        """
+        if is_online:
+            tool_message = self._build_openai_tool_calls([tr["tool_call"] for tr in tool_results])
             self._messages.append(tool_message)
-            tool_response = {
-                "role": "tool",
-                "tool_call_id": tool_call["id"],
-                "content": json.dumps(result.to_json(), ensure_ascii=False),
-            }
-            self._messages.append(tool_response)
+
+        for tr in tool_results:
+            self._messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tr["tool_call"]["id"],
+                    "content": str(tr["result"]),
+                }
+            )
+
+    def _tool_call_loop(self, pending_tool_calls: list, is_online: bool):
+        """
+        工具调用循环
+        """
+        tool_results = self._execute_all_tool_call(
+            pending_tool_calls=pending_tool_calls
+        )
+        if not tool_results:
+            return
+
+        self._append_tool_calls(tool_results=tool_results, is_online=is_online)
+        pending_tool_calls.clear()
+
         tools = self._tool_registry.to_ollama_tools() if self._enable_tools else None
         response = self._model.chat(messages=self._messages, tools=tools)
-        toll_call_needed = self._stream_handler(response=response)
-        if toll_call_needed:
-            self._tool_call_loop()
+        pending_tool_calls = self._stream_handler(response=response)
+        if pending_tool_calls:
+            self._tool_call_loop(pending_tool_calls, is_online)
 
     def _clear_message(self):
         """
