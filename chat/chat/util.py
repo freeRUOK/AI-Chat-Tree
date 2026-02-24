@@ -160,7 +160,9 @@ def input_handler(user_message: str) -> tuple[ContentTag, str | None]:
     return (ContentTag.empty, None)
 
 
-def first_online_host(addresss: tuple[str, int], timeout: float = 0.3) -> str | None:
+def first_online_host(
+    addresss: list[tuple[str, int]], timeout: float = 0.3
+) -> tuple[str, int] | None:
     """
     返回第一个可用的主机名和端口， 把优先使用的主机名放到靠前的位置， 备用主机名放到靠后的位置
     :param addresss: 主机名和端口列表

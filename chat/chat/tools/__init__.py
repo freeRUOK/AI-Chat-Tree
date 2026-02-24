@@ -28,7 +28,7 @@ class _ToolRegistry:
         """
         self._tools: dict[str, dict] = {}
 
-    def register(self, fun: Callable[[BaseModel], Result]):
+    def register(self, fun: Callable[[Any], Result]):
         """
         注册工具
         工具函数的参数必须是pydantic.BaseModel的子类型， 返回值应当是result.Result类型

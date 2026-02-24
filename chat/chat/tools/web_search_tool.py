@@ -5,8 +5,8 @@
 # * description: 一个简单的AI LLM聊天程序
 # 实现了一个Web搜索工具， 优先使用duckduckgo， 备用百度
 import requests
-from ddgs import DDGS
-from baidusearch.baidusearch import search as bds
+from ddgs import DDGS  # type: ignore
+from baidusearch.baidusearch import search as bds  # type: ignore
 from pydantic import BaseModel, Field
 from tools.result import Result
 from tools import get_tool_registry
@@ -14,7 +14,10 @@ from util import first_online_host
 
 _registry = get_tool_registry()
 _web_search_address: tuple | None = first_online_host(
-    addresss=[("duckduckgo.com", 443), ("baidu.com", 443)]
+    addresss=[
+        ("duckduckgo.com", 443),
+        ("baidu.com", 443),
+    ]
 )
 
 

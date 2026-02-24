@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "chat"
-version = "0.1.0"
-description = "一个简单的cli gui和webAI聊天机器人程序"
+name = "agent"
+version = "0.1.5"
+description = "一个简单的cli gui和webAI Agent智能体程序"
 authors = ["'FreeRUOK' <'2651688427@qq.com'>"]
 license = "MIT"
 readme = "README.md"
@@ -44,6 +44,7 @@ types-flask-socketio = "^5.5.0.20241227"
 nuitka = "^2.6.8"
 types-pyautogui = "^0.9.3.20241230"
 bandit = "^1.9.3"
+types-requests = "^2.32.4.20260107"
 
 [build-system]
 requires = ["poetry-core"]

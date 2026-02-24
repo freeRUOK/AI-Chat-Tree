@@ -5,6 +5,7 @@
 # * description: 一个简单的AI LLM聊天程序
 # 定义工具调用执行结果
 import json
+from typing_extensions import Any
 
 
 class Result:
@@ -23,7 +24,7 @@ class Result:
         self.result = result
         self.error = error
 
-    def to_json(self) -> dict[str, dict]:
+    def to_json(self) -> dict[str, Any]:
         """
         转换到json object， 方便发送给LLM
         :return: 返回原始python Object类型
@@ -32,4 +33,7 @@ class Result:
         return {"error": str(self.error), "result": self.result}
 
     def __repr__(self) -> str:
+        """
+        返回json格式的字符串
+        """
         return json.dumps(self.to_json(), ensure_ascii=False)

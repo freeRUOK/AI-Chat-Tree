@@ -4,6 +4,7 @@
 # * date： 2025-03
 # * description: 一个简单的AI LLM聊天程序
 # 定义操作Model对象的快捷函数
+from typing_extensions import Any
 from copy import deepcopy
 import json
 from model import Model
@@ -25,7 +26,7 @@ class ToolCallAccumulator:
         self._current_index = -1
         self._arguments_str = ""
 
-    def add_chunk(self, toll_calls: dict, is_online: bool) -> Exception | None:
+    def add_chunk(self, toll_calls: Any, is_online: bool) -> Exception | None:
         """
         添加工具调用辕信息， openAI特殊处理， ollama直接提取
         :param toll_calls: LLM返回的调用信息
@@ -50,7 +51,7 @@ class ToolCallAccumulator:
 
         return None
 
-    def _reset(self, tool_calls: dict | None = None):
+    def _reset(self, tool_calls: Any | None = None):
         """
         重置全部数据
         :param tool_calls: 如果提供该参数则填充， 否则重置为默认

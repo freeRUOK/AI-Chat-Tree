@@ -295,7 +295,9 @@ class Chat:
         :type is_online: bool
         """
         if is_online:
-            tool_message = self._build_openai_tool_calls([tr["tool_call"] for tr in tool_results])
+            tool_message = self._build_openai_tool_calls(
+                [tr["tool_call"] for tr in tool_results]
+            )
             self._messages.append(tool_message)
 
         for tr in tool_results:
