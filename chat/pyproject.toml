@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "agent"
-version = "0.1.5"
+version = "0.1.8"
 description = "一个简单的cli gui和webAI Agent智能体程序"
 authors = ["'FreeRUOK' <'2651688427@qq.com'>"]
 license = "MIT"
@@ -34,6 +34,7 @@ requests = "^2.32.5"
 ddgs = "^9.10.0"
 pydantic = "^2.12.5"
 openai = "^2.21.0"
+dotenv = "^0.9.9"
 
 
 [tool.poetry.group.dev.dependencies]

@@ -55,11 +55,6 @@ class Model:
     定义某个llm模型组
     包括若干子模型和相关重要参数
     并且提供和当前模型组交互的chat方法
-    ----------
-    api_key铭文保存在配置文件里
-    目前在本地环境运行， 所以这样做没有什么问题，
-    如果在相对暴露环境下运行或者api_key价值比较高必须采取额外的安全措施
-    ----------
     """
 
     def __init__(
@@ -124,7 +119,7 @@ class Model:
             return self._openAIClient.chat.completions.create(
                 model=self.current_model,
                 messages=messages,
-                tools=active_tools,
+                tools=active_tools,  # type: ignore[arg-type]
                 parallel_tool_calls=True,
                 stream=True,
             )
@@ -203,7 +198,7 @@ class ModelOutput:
         """
         return self
 
-    def __exit__(self, exc_typ, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         """
         with语句自动管理
         """

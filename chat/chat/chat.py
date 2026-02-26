@@ -7,7 +7,7 @@
 # 机器和人通过这个类相互交流
 import threading
 from copy import deepcopy
-from typing import Callable
+from typing import Callable, Any
 from datetime import datetime, timedelta
 import ollama
 from openai import APIStatusError, RateLimitError, APIConnectionError
@@ -75,9 +75,9 @@ class Chat:
         :type base64_image: str | None
         成功添加消息返回True， 否则返回False
         """
-        new_message = {}
+        new_message: dict[str, Any] = {}
         if self._model.is_online:
-            content = [{"type": "text", "text": user_message}]
+            content: list[dict] = [{"type": "text", "text": user_message}]
             if base64_image:
                 content.append(
                     {
@@ -87,12 +87,12 @@ class Chat:
                 )
             new_message = {"role": "user", "content": content}
         else:
-            msg = {"role": "user", "content": user_message}
+            msg: dict[str, Any] = {"role": "user", "content": user_message}
             if base64_image:
                 msg["images"] = [
                     base64_image,
                 ]
-            new_message = msg
+            new_message= msg
 
         if new_message:
             new_message[_format] = "openai" if self._model.is_online else "ollama"
@@ -115,7 +115,7 @@ class Chat:
             try:
                 tools = (
                     self._tool_registry.to_ollama_tools()
-                    if self._enable_tools
+                    if self._tool_registry is not None and self._enable_tools
                     else None
                 )
                 response = self._model.chat(messages=self._messages, tools=tools)
@@ -188,7 +188,7 @@ class Chat:
 
             if delta.tool_calls is not None:
                 self._tool_call_accumulator.add_chunk(
-                    *delta.tool_calls, self._model.is_online
+                    *delta.tool_calls, is_online=self._model.is_online
                 )
 
             if delta.content is None:
@@ -238,7 +238,7 @@ class Chat:
 
         return ModelResult(delta.content, self._model_result_tag)
 
-    def _execute_all_tool_call(self, pending_tool_calls: list) -> list[Result]:
+    def _execute_all_tool_call(self, pending_tool_calls: list) -> list[dict]:
         """
         一次性执行所有工具调用
         :param pending_tool_calls: 需要执行的工具列表
@@ -246,6 +246,9 @@ class Chat:
         :return: 返回工具执行结果
         :rtype: list[Result]
         """
+        if self._tool_registry is None:
+            return []
+
         tool_results = []
         for tc in pending_tool_calls:
             print(f"\n\nTool Calling: {tc['name']} Arguments: {tc['arguments']}")
@@ -322,7 +325,7 @@ class Chat:
         self._append_tool_calls(tool_results=tool_results, is_online=is_online)
         pending_tool_calls.clear()
 
-        tools = self._tool_registry.to_ollama_tools() if self._enable_tools else None
+        tools = self._tool_registry.to_ollama_tools() if self._tool_registry is not None and self._enable_tools else None
         response = self._model.chat(messages=self._messages, tools=tools)
         pending_tool_calls = self._stream_handler(response=response)
         if pending_tool_calls:
@@ -341,7 +344,7 @@ class Chat:
         if _is_request not in target:
             return
 
-        if target[_format] == "openai":
+        if target[_format] == "openai" and isinstance(target["content"], list) and len(target["content"]) > 0:
             target["content"] = target["content"][0]["text"]
 
         if target[_has_image] and "images" in target:

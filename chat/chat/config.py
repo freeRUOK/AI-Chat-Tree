@@ -5,9 +5,13 @@
 # * description: 一个简单的AI LLM聊天程序
 # 集中管理所有配置项目
 from typing import Any
+import os
 import yaml
+from dotenv import load_dotenv
 from consts import CONFIG_PATH
 from util import read_file_text, debug_log, validate_values
+
+load_dotenv(override=True)
 
 
 class Config:
@@ -28,6 +32,7 @@ class Config:
         try:
             if yml_data := read_file_text(filename=self._config_path, require=True):
                 self._config = yaml.safe_load(yml_data)
+                self._find_env_value(self._config)
         except (yaml.error.YAMLError, FileNotFoundError, PermissionError) as e:
             debug_log(e)
             if not self._build_empty:
@@ -113,3 +118,28 @@ class Config:
                 print(f"yml配置文件可能有语法错误\n请检查{path}字段")
 
         return None
+
+    def _find_env_value(self, item: Any):
+        """
+        查找配置里是否有环境变量
+        如果有递归执行真实环境变量值替换
+        :param item: 需要查找的替换范围
+        :type item: Any
+        """
+        if isinstance(item, dict):
+            for key in list(item.keys()):
+                self._replace_env_value(item, key)
+
+        elif isinstance(item, list):
+            for i in range(len(item)):
+                self._replace_env_value(item, i)
+
+    def _replace_env_value(self, item: Any, index: Any):
+        """
+        真正替换
+        """
+        if isinstance(item[index], str) and item[index].startswith("$"):
+            env_name = item[index][1:]
+            item[index] = os.environ.get(env_name, item[index])
+        else:
+            self._find_env_value(item[index])

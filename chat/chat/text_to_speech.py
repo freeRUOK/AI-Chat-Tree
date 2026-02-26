@@ -42,8 +42,7 @@ class TextToSpeech(threading.Thread):
         volume: str = "+0%",
         process_callback: Callable[[BytesIO], None] | None = None,
     ):
-        super().__init__()
-        self.daemon = True
+        super().__init__(daemon=True)
         self.option = option
         self._voice = voice
         self._rate = rate

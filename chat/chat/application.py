@@ -72,13 +72,13 @@ class Application(threading.Thread):
         self.voice_input_manager.start()
         return self
 
-    def __exit__(self, exc_typ, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         """
         with自动管理上下文， 语句块的结束部分运行
         这里可以保存状态或清理资源
         """
         self.voice_input_manager.stop()
-        if exc_typ:
+        if exc_type:
             debug_log(exc_val)
 
     def get_model_info(self, content_tag: ContentTag) -> ModelInfo:

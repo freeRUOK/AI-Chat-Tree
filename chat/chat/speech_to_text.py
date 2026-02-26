@@ -16,7 +16,6 @@ from util import debug_log
 
 class SpeechToText(threading.Thread):
     """
-    Docstring for SpeechToText
     实现了录音和语音转换到文本的功能
     sounddevice录音； vosk语音识别
     """

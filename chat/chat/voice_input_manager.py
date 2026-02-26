@@ -16,7 +16,6 @@ from sound_player import get_sound_player, PlayMode
 
 class VoiceInputManager:
     """
-    Docstring for VoiceInputManager
     统一管理和调度语音输入
     包括语音唤醒和语音识别
     """

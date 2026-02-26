@@ -183,6 +183,9 @@ class MainFrame(wx.Frame):
         """
         录音事件处理函数
         """
+        if self.application is None:
+            return
+
         if self.application.voice_input_manager._speech_to_text.is_recording():
             self.application.voice_input_manager.end_voice_input()
             self.create_message_tree_element("语音输入的内容： ")
@@ -492,7 +495,7 @@ if __name__ == "__main__":
                 chunk_callback=frame.on_chunk,
                 finish_callback=frame.on_finish,
                 voice_input_callback=frame.status.on_speech_result,
-                enable_tools=True,
+                enable_tools=False,
             )
         )
 

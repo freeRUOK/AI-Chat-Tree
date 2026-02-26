@@ -13,7 +13,6 @@ import sounddevice as sd  # type: ignore
 
 class WakeWordDetector(threading.Thread):
     """
-    Docstring for WakeWordDetector
     持续监听系统麦克风检测唤醒词
     检测到唤醒词之后在单独线程调用回调函数
     """

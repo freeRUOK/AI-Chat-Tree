@@ -8,7 +8,7 @@
 
 from io import BytesIO
 from contextlib import ExitStack
-import os
+from pathlib import Path
 from flask import Flask, send_from_directory
 from flask_socketio import SocketIO
 from data_status import DataStatus as ServeStatus
@@ -41,7 +41,7 @@ class WSServe:
         """
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_bt):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         """
         上下文自动管理
         """
@@ -51,7 +51,7 @@ class WSServe:
         """
         设置http路由，便于处理静态文件和首页重定向
         """
-        static_folder_path = os.path.abspath(os.path.join(os.getcwd(), "static"))
+        static_folder_path = Path("static").resolve()
 
         @self.app.route("/<path:filename>")
         def static_files(filename):

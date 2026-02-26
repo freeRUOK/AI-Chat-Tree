@@ -39,6 +39,9 @@ def _get_real_url(baidu_link: str) -> str:
     :return: 如果能查到真是URL则返回， 否则加密URL原样返回
     :rtype: str
     """
+    if not baidu_link:
+        return ""
+
     headers = {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0"
     }
@@ -85,13 +88,13 @@ def web_search(input_model: _WebSearchInput) -> Result:
             {
                 "title": result.get("title", ""),
                 "url": result.get(url_name, "")
-                if _web_search_address[0] != "baidu.com"
-                else _get_real_url(result.get("url")),
+                if _web_search_address is not None and _web_search_address[0] != "baidu.com"
+                else _get_real_url(result.get("url", "")),
                 "snippet": result.get(body_name, ""),
             }
             for result in search_results
         ]
 
-        return Result(result=search_data)
+        return Result(result={"search_results": search_data})
     except Exception as e:
         return Result(result={}, error=e)

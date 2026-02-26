@@ -1,13 +1,13 @@
 usage:
   ollama_host: http://127.0.0.1:11434
-  ollama_api_key: my-key
+  ollama_api_key: $OLLAMA_API_KEY
   chat_collection_dir: chat_collections
 models:
 - group_name: deepseek
   is_online: true
   show_reasoning: true
   base_url: https://api.deepseek.com
-  api_key: my-key
+  api_key: $DEEPSEEK_API_KEY
   sub_models:
   - deepseek-reasoner
   - deepseek-chat
@@ -15,7 +15,7 @@ models:
   is_online: true
   show_reasoning: true
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
-  api_key: my-api-key
+  api_key: $QWEN_API_KEY
   sub_models:
   - Qwen3.5-Plus
   - Qwen3.5-Plus-2026-02-15
@@ -24,7 +24,6 @@ models:
   - qwen-plus
   - qwen-turbo
   - qwen-max
-  - qwen3-coder-plus
   - qwen-flash
   - qwq-plus
   - qwen-vl-max
@@ -33,7 +32,7 @@ text_to_speech:
   rate: +100%
   volume: +20%
 voice_input:
-  porcupine_access_key: my-key
+  porcupine_access_key: $PORCUPINE_ACCESS_KEY
   porcupine_model_path: C:\Users\free\.models\porcupine\porcupine_params_zh.pv
   porcupine_wake_zh_model_path: C:\Users\free\.models\porcupine\黑鹰_zh_windows_v4_0_0\黑鹰_zh_windows_v4_0_0.ppn
   vosk_model_path: C:\Users\free\.models\vosk\vosk-model-small-cn-0.22

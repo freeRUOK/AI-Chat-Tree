@@ -26,7 +26,7 @@ class ToolCallAccumulator:
         self._current_index = -1
         self._arguments_str = ""
 
-    def add_chunk(self, toll_calls: Any, is_online: bool) -> Exception | None:
+    def add_chunk(self, toll_calls: Any, is_online: bool=False) -> Exception | None:
         """
         添加工具调用辕信息， openAI特殊处理， ollama直接提取
         :param toll_calls: LLM返回的调用信息
@@ -68,7 +68,7 @@ class ToolCallAccumulator:
             self._current_tool_call = {}
             self._arguments_str = ""
 
-    def _process_openai_stream(self, tool_calls: dict) -> Exception | None:
+    def _process_openai_stream(self, tool_calls: Any) -> Exception | None:
         """
         对OpenAI stream数据流做特殊处理
         因为该API是stream返回工具调用信息的， 所以需要每次返回的时候累积所有片段
@@ -82,9 +82,10 @@ class ToolCallAccumulator:
 
         if tool_calls.index == self._current_index:
             self._arguments_str += tool_calls.function.arguments
-            return None
         else:
             self.add_last_tool_call(tool_calls)
+
+        return None
 
     def add_last_tool_call(self, tool_calls: dict | None = None) -> Exception | None:
         """
