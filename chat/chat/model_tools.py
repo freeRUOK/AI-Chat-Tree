@@ -26,26 +26,26 @@ class ToolCallAccumulator:
         self._current_index = -1
         self._arguments_str = ""
 
-    def add_chunk(self, toll_calls: Any, is_online: bool=False) -> Exception | None:
+    def add_chunk(self, tool_calls: Any, is_online: bool = False) -> Exception | None:
         """
         添加工具调用辕信息， openAI特殊处理， ollama直接提取
-        :param toll_calls: LLM返回的调用信息
-        :type toll_calls: dict
+        :param tool_calls: LLM返回的调用信息
+        :type tool_calls: dict
         :param is_online: 是否为在线模型， 在线模型用OpenAI格式， 否则使用ollama格式
         :type is_online: bool
         :return: 成功返回None, 失败返回对应的错误
         :rtype: Exception | None
         """
         if is_online:
-            return self._process_openai_stream(toll_calls)
+            return self._process_openai_stream(tool_calls)
 
         else:
             tool_call = {
-                "id": toll_calls.id
-                if "id" in toll_calls
+                "id": tool_calls.id
+                if "id" in tool_calls
                 else f"call_{len(self._tool_calls)}",
-                "name": toll_calls.function.name,
-                "arguments": toll_calls.function.arguments,
+                "name": tool_calls.function.name,
+                "arguments": tool_calls.function.arguments,
             }
             self._tool_calls.append(tool_call)
 

@@ -88,7 +88,8 @@ def web_search(input_model: _WebSearchInput) -> Result:
             {
                 "title": result.get("title", ""),
                 "url": result.get(url_name, "")
-                if _web_search_address is not None and _web_search_address[0] != "baidu.com"
+                if _web_search_address is not None
+                and _web_search_address[0] != "baidu.com"
                 else _get_real_url(result.get("url", "")),
                 "snippet": result.get(body_name, ""),
             }

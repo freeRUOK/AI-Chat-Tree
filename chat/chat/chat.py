@@ -18,7 +18,6 @@ from util import debug_log, DEBUG_MODE
 from model import Model, ModelResult, ModelOutput
 from consts import ContentTag, _format, _has_image, _is_request
 from tools import get_tool_registry
-from tools.result import Result
 
 
 class Chat:
@@ -92,7 +91,7 @@ class Chat:
                 msg["images"] = [
                     base64_image,
                 ]
-            new_message= msg
+            new_message = msg
 
         if new_message:
             new_message[_format] = "openai" if self._model.is_online else "ollama"
@@ -325,7 +324,11 @@ class Chat:
         self._append_tool_calls(tool_results=tool_results, is_online=is_online)
         pending_tool_calls.clear()
 
-        tools = self._tool_registry.to_ollama_tools() if self._tool_registry is not None and self._enable_tools else None
+        tools = (
+            self._tool_registry.to_ollama_tools()
+            if self._tool_registry is not None and self._enable_tools
+            else None
+        )
         response = self._model.chat(messages=self._messages, tools=tools)
         pending_tool_calls = self._stream_handler(response=response)
         if pending_tool_calls:
@@ -344,7 +347,11 @@ class Chat:
         if _is_request not in target:
             return
 
-        if target[_format] == "openai" and isinstance(target["content"], list) and len(target["content"]) > 0:
+        if (
+            target[_format] == "openai"
+            and isinstance(target["content"], list)
+            and len(target["content"]) > 0
+        ):
             target["content"] = target["content"][0]["text"]
 
         if target[_has_image] and "images" in target:
