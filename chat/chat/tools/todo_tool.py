@@ -114,9 +114,9 @@ def get_todo_manager() -> "_TodoManager":
 
 
 @registry.register
-def todo(p: TodoInputModel) -> Result:
+def todo_write(p: TodoInputModel) -> Result:
     """
-    更新待办
+    生成清晰的待办列表
     最多只能有12个待办
     一个待办列表只能存在一个status： in_progress
     """

@@ -27,7 +27,8 @@ class _ToolRegistry:
         """
         self._tools: dict[str, dict] = {}
         self._calls_since_todo = 0
-        self._reminder_threshold = 5
+        self._reminder_threshold = 8
+        self._last_tool_name = ""
 
     def register(self, fun: Callable[[Any], Result]):
         """
@@ -98,6 +99,13 @@ class _ToolRegistry:
         if not info:
             return Result(result={}, error=RuntimeError(f"找不到工具： {name}"))
 
+        if self._last_tool_name == name and name == "todo_write":
+            return Result(
+                result={},
+                reminder="不能连续调用todo_write假装执行任务，必须调用真实工具推进相关todos",
+            )
+
+        self._last_tool_name = name
         try:
             args = info["input_model"](**arguments)
             result = info["fun"](args)
@@ -115,7 +123,7 @@ class _ToolRegistry:
         """
         from tools.todo_tool import get_todo_manager
 
-        if tool_name == "todo":
+        if tool_name == "todo_write":
             self._calls_since_todo = 0
             return None
 
@@ -130,7 +138,7 @@ class _ToolRegistry:
         calls_since_todo = self._calls_since_todo
         self._calls_since_todo = 0
 
-        return f"系统提醒： 已连续{calls_since_todo}次没有Update Todos了\n{todo_manager.render()}\n建议使用todo工具更新进度"
+        return f"系统提醒： 已连续超过{calls_since_todo}次没有todo_write了\n{todo_manager.render()}\n建议使用todo_write工具更新进度"
 
 
 def _setup_import_hack():
