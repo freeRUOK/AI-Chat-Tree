@@ -21,10 +21,20 @@ class ToolCallAccumulator:
         """
         初始化
         """
+        self._do_init()
+
+    def _do_init(self):
+        """
+        初始化和重置的重复代码放在一起
+        """
         self._tool_calls: list = []
-        self._current_tool_call = {}
-        self._current_index = -1
-        self._arguments_str = ""
+        self._current_tool_call = {
+            "id": None,
+            "index": -1,
+            "name": None,
+            "arguments": "",
+        }
+        self._arguments_string = ""
 
     def add_chunk(self, tool_calls: Any, is_online: bool = False) -> Exception | None:
         """
@@ -51,23 +61,6 @@ class ToolCallAccumulator:
 
         return None
 
-    def _reset(self, tool_calls: Any | None = None):
-        """
-        重置全部数据
-        :param tool_calls: 如果提供该参数则填充， 否则重置为默认
-        :type tool_calls: dict | None
-        """
-        if tool_calls is not None:
-            self._current_index = tool_calls.index
-            self._current_tool_call["index"] = tool_calls.index
-            self._current_tool_call["id"] = tool_calls.id
-            self._current_tool_call["name"] = tool_calls.function.name
-            self._arguments_str = tool_calls.function.arguments or ""
-        else:
-            self._current_index = -1
-            self._current_tool_call = {}
-            self._arguments_str = ""
-
     def _process_openai_stream(self, tool_calls: Any) -> Exception | None:
         """
         对OpenAI stream数据流做特殊处理
@@ -77,31 +70,45 @@ class ToolCallAccumulator:
         :return: 成功返回None； 失败返回对应的错误
         :rtype: Exception | None
         """
-        if self._current_index == -1:
-            self._reset(tool_calls)
-
-        if tool_calls.index == self._current_index:
-            self._arguments_str += tool_calls.function.arguments
+        if self._current_tool_call["index"] == tool_calls.index:
+            self._current_tool_call["id"] = (
+                tool_calls.id or self._current_tool_call["id"]
+            )
+            self._current_tool_call["name"] = (
+                tool_calls.function.name or self._current_tool_call["name"]
+            )
+            self._arguments_string += tool_calls.function.arguments or ""
         else:
-            self.add_last_tool_call(tool_calls)
+            if self._current_tool_call["index"] != -1:
+                if err := self.add_last_tool_call():
+                    return err
+
+            self._current_tool_call = {
+                "index": tool_calls.index,
+                "id": tool_calls.id,
+                "name": tool_calls.function.name,
+                "arguments": "",
+            }
+            self._arguments_string = tool_calls.function.arguments or ""
 
         return None
 
-    def add_last_tool_call(self, tool_calls: dict | None = None) -> Exception | None:
+    def add_last_tool_call(self) -> Exception | None:
         """
         添加最后一个滞留的工具调用信息添加到工具调用列表
-        调用process_openai_stream方法的时候只有一个工具调用的情况之下else语句不会被执行
         所以在调用all方法的时候必须调用该方法添加最后一个工具调用信息
-        :param tool_calls: 在all方法可以留空； 在process_openai_stream方法里必须提供
-        :type tool_calls: dict | None
         :return: 成功返回None; 失败返回对应的错误
         :rtype: Exception | None
         """
+        if not self._current_tool_call.get("name"):
+            return ValueError("current_tool_call.name  name not found.")
+
         try:
-            self._current_tool_call["arguments"] = json.loads(self._arguments_str)
-            self._current_tool_call["arguments_string"] = self._arguments_str
+            arguments_string = self._arguments_string.strip()
+            arguments_string = arguments_string if arguments_string else "{}"
+            self._current_tool_call["arguments"] = json.loads(arguments_string)
+            self._current_tool_call["arguments_string"] = arguments_string
             self._tool_calls.append(deepcopy(self._current_tool_call))
-            self._reset(tool_calls=tool_calls)
         except json.decoder.JSONDecodeError as e:
             return e
 
@@ -115,7 +122,7 @@ class ToolCallAccumulator:
         """
         self.add_last_tool_call()
         result = deepcopy(self._tool_calls)
-        self._tool_calls = []
+        self._do_init()
         return result
 
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, model_validator
 from tools.result import Result
 from tools import get_tool_registry
-from util import read_file_text
+from util import read_file_text, DEBUG_MODE, debug_log
 
 SHELL_BOX_DIR = "shell_box"
 DANGEROUS_PATTERNS = [
@@ -113,12 +113,12 @@ class ShellInputModel(BaseModel):
         default=None, description="grep专用，搜索模式字符串或正则表达式"
     )
     context_lines: int = Field(
-        default=2, gt=0, le=20, description="grep专用，匹配行前行后显是的行数"
+        default=2, ge=0, le=20, description="grep专用，匹配行前行后显是的行数"
     )
 
     # === 通用参数 ===
     shell_work_directory: str = Field(
-        description="单独工作文件夹，鼓励使用有意义的名称，鼓励同一组任务在相同文件夹下运行",
+        description="工具工作目录，一组任务一个目录，一个项目一个目录",
         default=f"code-{int(time.time() % 100000)}",
     )
 
@@ -211,6 +211,9 @@ class ShellToolDispatcher:
             )
             return handler(paramms, cwd)
         except Exception as e:
+            if DEBUG_MODE:
+                raise e
+
             return Result(error=e, result={})
 
     def _handler_command(self, p: ShellInputModel, cwd: Path) -> Result:

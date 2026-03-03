@@ -26,6 +26,8 @@ class _ToolRegistry:
         初始化
         """
         self._tools: dict[str, dict] = {}
+        self._calls_since_todo = 0
+        self._reminder_threshold = 5
 
     def register(self, fun: Callable[[Any], Result]):
         """
@@ -99,9 +101,36 @@ class _ToolRegistry:
         try:
             args = info["input_model"](**arguments)
             result = info["fun"](args)
+            result.reminder = self._build_reminder(tool_name=name)
+
             return result
         except Exception as e:
             return Result(result={}, error=e)
+
+    def _build_reminder(self, tool_name: str) -> str | None:
+        """
+        构造系统提醒消息
+        :return: 系统提醒消息
+        :rtype: str
+        """
+        from tools.todo_tool import get_todo_manager
+
+        if tool_name == "todo":
+            self._calls_since_todo = 0
+            return None
+
+        self._calls_since_todo += 1
+        if self._calls_since_todo < self._reminder_threshold:
+            return None
+
+        todo_manager = get_todo_manager()
+        if not todo_manager.is_active():
+            self._calls_since_todo = 0
+            return None
+        calls_since_todo = self._calls_since_todo
+        self._calls_since_todo = 0
+
+        return f"系统提醒： 已连续{calls_since_todo}次没有Update Todos了\n{todo_manager.render()}\n建议使用todo工具更新进度"
 
 
 def _setup_import_hack():
