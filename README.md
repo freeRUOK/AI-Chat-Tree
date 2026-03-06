@@ -101,7 +101,7 @@ voice_input: # 语音唤醒和语音输入方面
 - `chat.py` `model.py` `model_tools.py`：主要是 LLM 模型的管理和辅助功能。
 - `voice_input_manager.py` `speech_to_text.py` `wake_word_detector.py`：语音唤醒和语音输入的实现，`voice_input_manager.py` 协调整个语音唤醒和语音输入流程。
 - tools/__init__.py 自动注册工具
-- ./tools/shell_tool.py; Calculate_tool.py; web_search_tool.py 是几个方便的内置工具， 用来运行系统命令； 操作文件系统 web搜索和计算器。
+- ./tools/shell_tool.py; smart_calc_tool.py; web_search_tool.py; todo_tool.py 是几个方便的内置工具， 用来运行系统命令； 操作文件系统 web搜索任务规划日期时间和计算器。
 
 ## 后续开发路线
 
