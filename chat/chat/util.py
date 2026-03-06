@@ -11,38 +11,15 @@ import base64
 from pathlib import Path
 import re
 import socket
-import os
 from PIL import Image
 import cv2
 import pyautogui
 import pygetwindow as gw  # type: ignore
-from loguru import logger
 import prompt_toolkit
 import pyperclip  # type: ignore
 import chardet
 from consts import ContentTag
-
-# 配置日志记录
-logger.remove()
-logger.add(
-    "logs/debug.log",
-    format="{line} | {message} | {time:YYYY-MM-DD HH:mm:ss}",
-    rotation="1 MB",
-    compression="zip",
-    backtrace=True,
-    diagnose=True,
-    enqueue=True,
-)
-debug_logger = logger
-DEBUG_MODE = os.getenv("DEBUG_MODE", None)
-
-
-def debug_log(err: Exception):
-    """
-    记录错误和调用堆栈
-    """
-    if DEBUG_MODE:
-        logger.exception(f"Error: {err}")
+from error_handling import debug_log
 
 
 def clear_queue(queue: Queue):

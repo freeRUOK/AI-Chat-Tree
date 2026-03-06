@@ -15,7 +15,8 @@ import edge_tts
 import simpleaudio as sa  # type: ignore
 from pydub import AudioSegment  # type: ignore
 from aiohttp.client_exceptions import WSServerHandshakeError as EdgeTTSServerError
-from util import clear_queue, debug_log
+from util import clear_queue
+from error_handling import debug_log
 
 
 class TextToSpeechOption(str, Enum):

@@ -135,7 +135,7 @@ def find_model_group_index(model_list: list, name: str | None = None) -> int:
 
     for index, model in enumerate(model_list):
         for sub_model in model["sub_models"]:
-            if name in sub_model:
+            if name == sub_model:
                 return index
 
     return -1

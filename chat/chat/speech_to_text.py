@@ -11,7 +11,7 @@ import json
 import numpy as np
 import vosk  # type: ignore
 import sounddevice as sd  # type: ignore
-from util import debug_log
+from error_handling import debug_log
 
 
 class SpeechToText(threading.Thread):

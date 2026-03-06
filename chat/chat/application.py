@@ -14,7 +14,7 @@ from consts import default_system_prompt, ContentTag
 from chat import Chat
 from model import ModelOutput, Model, ModelResult, ModelInfo
 from model_tools import create_or_switch_model
-from util import debug_log, DEBUG_MODE
+from error_handling import debug_log, DEBUG_MODE
 from text_to_speech import TextToSpeechOption
 from voice_input_manager import VoiceInputManager
 

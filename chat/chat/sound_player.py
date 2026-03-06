@@ -9,7 +9,8 @@ from enum import Enum
 from queue import Queue
 import threading
 import simpleaudio as sa  # type: ignore
-from util import clear_queue, debug_log
+from util import clear_queue
+from error_handling import debug_log
 
 
 class PlayMode(str, Enum):

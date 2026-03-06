@@ -13,6 +13,7 @@ import importlib
 from pathlib import Path
 from pydantic import BaseModel
 from tools.result import Result
+from error_handling import debug_log
 
 
 class _ToolRegistry:
@@ -77,13 +78,19 @@ class _ToolRegistry:
         """
         return self._tools.get(name)
 
-    def to_ollama_tools(self) -> list[dict]:
+    def to_call_tools(self, exclude: set[str] | None = None) -> list[dict]:
         """
-        获取ollama格式的全部工具， 以便调用
+        获取全部工具， 以便调用
+        param: exclude : 需要排除的工具列表
         :return: 返回所有工具列表
         :rtype: list[dict]
         """
-        return [info["tool_def"] for info in self._tools.values()]
+        exclude_set = exclude or {}
+        return [
+            info["tool_def"]
+            for name, info in self._tools.items()
+            if name not in exclude_set
+        ]
 
     def execute(self, name: str, arguments: dict) -> Result:
         """

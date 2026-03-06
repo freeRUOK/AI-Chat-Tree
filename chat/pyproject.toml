@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "agent"
-version = "0.1.9"
+version = "0.1.10"
 description = "一个简单的cli gui和webAI Agent智能体程序"
 authors = ["'FreeRUOK' <'2651688427@qq.com'>"]
 license = "MIT"

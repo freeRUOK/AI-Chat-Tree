@@ -13,7 +13,8 @@ from pathlib import Path
 import ollama
 from openai import OpenAI
 from consts import ContentTag
-from util import validate_values, debug_log
+from util import validate_values
+from error_handling import debug_log
 from text_to_speech import TextToSpeech, TextToSpeechOption
 from config import Config
 
@@ -107,7 +108,9 @@ class Model:
 
         self.tools = tools or []
 
-    def chat(self, messages: list, tools: list[dict] | None = None):
+    def chat(
+        self, messages: list, tools: list[dict] | None = None, stream: bool = True
+    ):
         """
         给模型发送消息， 支持工具调用
         """
@@ -121,15 +124,18 @@ class Model:
                 messages=messages,
                 tools=active_tools,  # type: ignore[arg-type]
                 parallel_tool_calls=True,
-                stream=True,
+                stream=stream,
             )
         else:
             return self._ollamaClient.chat(
                 model=self.current_model,
                 messages=messages,
                 tools=active_tools,
-                stream=True,
+                stream=stream,
             )
+
+    def response_handler(self, response: Any) -> list:
+        raise RuntimeError("默认处理函数没有实现")
 
     def to_dict(
         self,

@@ -13,11 +13,10 @@ import ollama
 from openai import APIStatusError, RateLimitError, APIConnectionError
 from httpx import ReadTimeout as OpenAIReadTimeout
 from model_tools import create_or_switch_model, ToolCallAccumulator
-from util import debug_log, DEBUG_MODE
-
 from model import Model, ModelResult, ModelOutput
 from consts import ContentTag, _format, _has_image, _is_request
-from tools import get_tool_registry
+from tool_call_looper import ToolCallLooper
+from error_handling import debug_log
 
 
 class Chat:
@@ -60,7 +59,7 @@ class Chat:
             },
         ]
         self._enable_tools = enable_tools
-        self._tool_registry = get_tool_registry() if self._enable_tools else None
+        self._tool_call_looper = ToolCallLooper(enable_tools=self._enable_tools)
         self._tool_call_accumulator = ToolCallAccumulator()
 
     def _append_message(
@@ -112,20 +111,18 @@ class Chat:
         # 如果错误可以恢复的话最多3次重试
         for i in range(3):
             try:
-                tools = (
-                    self._tool_registry.to_ollama_tools()
-                    if self._tool_registry is not None and self._enable_tools
-                    else None
-                )
-                response = self._model.chat(messages=self._messages, tools=tools)
-
                 self._start_time = datetime.now()
+
+                def stream_handler(response):
+                    return self._stream_handler(response=response)
+
                 # 处理流逝返回的消息块
-                pending_tool_calls = self._stream_handler(response)
-                if pending_tool_calls:
-                    self._tool_call_loop(pending_tool_calls, self._model.is_online)
-                else:
-                    break
+                self._messages = self._tool_call_looper.run(
+                    model=self._model,
+                    messages=self._messages,
+                    is_online=self._model.is_online,
+                    stream_handler=stream_handler,
+                )
 
                 break
             except (
@@ -147,7 +144,7 @@ class Chat:
 
     def _error_handler(self, err: Exception, call_count: int) -> bool:
         """
-        处理发送聊天信息期间的错误
+         处理发送聊天信息期间的错误
         返回True暂时故障，
         返回False不可恢复错误， 可能是程序bug或者配置错误
         """
@@ -236,103 +233,6 @@ class Chat:
             delta.content = "\n"
 
         return ModelResult(delta.content, self._model_result_tag)
-
-    def _execute_all_tool_call(self, pending_tool_calls: list) -> list[dict]:
-        """
-        一次性执行所有工具调用
-        :param pending_tool_calls: 需要执行的工具列表
-        :type pending_tool_calls: list
-        :return: 返回工具执行结果
-        :rtype: list[Result]
-        """
-        if self._tool_registry is None:
-            return []
-
-        tool_results = []
-        for tc in pending_tool_calls:
-            print(f"\n\nTool Calling: {tc['name']} Arguments: {tc['arguments']}")
-            result = self._tool_registry.execute(
-                name=tc["name"], arguments=tc["arguments"]
-            )
-            print(f"Tool Calling: {tc['name']} Done. Return Result: {result}")
-            if DEBUG_MODE and result.error:
-                raise result.error
-
-            tool_results.append({"tool_call": tc, "result": result})
-
-        return tool_results
-
-    def _build_openai_tool_calls(self, tool_calls: list) -> dict:
-        """
-        添加openai格式的工具调用消息
-        :param tool_calls: 工具调用列表
-        :type tool_calls: list
-        :return: OpenAI工具调用消息
-        :rtype: dict
-        """
-        tool_message = {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [
-                {
-                    "id": tc["id"],
-                    "type": "function",
-                    "function": {
-                        "name": tc["name"],
-                        "arguments": tc["arguments_string"],
-                    },
-                }
-                for tc in tool_calls
-            ],
-        }
-
-        return tool_message
-
-    def _append_tool_calls(self, tool_results: list, is_online: bool):
-        """
-        把工具调用所有消息添加到聊天队列
-        :param tool_results: 工具调用结果
-        :type tool_results: list
-        :param is_online: 是否在线模型
-        :type is_online: bool
-        """
-        if is_online:
-            tool_message = self._build_openai_tool_calls(
-                [tr["tool_call"] for tr in tool_results]
-            )
-            self._messages.append(tool_message)
-
-        for tr in tool_results:
-            self._messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tr["tool_call"]["id"],
-                    "content": str(tr["result"]),
-                }
-            )
-
-    def _tool_call_loop(self, pending_tool_calls: list, is_online: bool):
-        """
-        工具调用循环
-        """
-        tool_results = self._execute_all_tool_call(
-            pending_tool_calls=pending_tool_calls
-        )
-        if not tool_results:
-            return
-
-        self._append_tool_calls(tool_results=tool_results, is_online=is_online)
-        pending_tool_calls.clear()
-
-        tools = (
-            self._tool_registry.to_ollama_tools()
-            if self._tool_registry is not None and self._enable_tools
-            else None
-        )
-        response = self._model.chat(messages=self._messages, tools=tools)
-        pending_tool_calls = self._stream_handler(response=response)
-        if pending_tool_calls:
-            self._tool_call_loop(pending_tool_calls, is_online)
 
     def _clear_message(self):
         """

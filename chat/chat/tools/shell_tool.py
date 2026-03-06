@@ -4,16 +4,16 @@
 # * date： 2026-02
 # * description: 一个简单的AI LLM聊天程序
 # 简单实现了一个简单执行shell命令的工具
-from typing import Literal, Union, Optional
+from typing import Literal
 import subprocess
-import time
 import re
 import platform
 from pathlib import Path
 from pydantic import BaseModel, Field, model_validator
 from tools.result import Result
 from tools import get_tool_registry
-from util import read_file_text, DEBUG_MODE, debug_log
+from util import read_file_text
+from error_handling import DEBUG_MODE
 
 SHELL_BOX_DIR = "shell_box"
 DANGEROUS_PATTERNS = [
@@ -119,7 +119,7 @@ class ShellInputModel(BaseModel):
     # === 通用参数 ===
     shell_work_directory: str = Field(
         description="工具工作目录，一组任务一个目录，一个项目一个目录",
-        default=f"code-{int(time.time() % 100000)}",
+        default="",
     )
 
     @model_validator(mode="after")
@@ -433,6 +433,7 @@ def execute_shell(shell_inputModel: ShellInputModel) -> Result:
     """
     shell工具的统一入口：
     根据ShellInputModel.inner_fun_name自动分发给内部处理子工具
+    优先使用非command功能，除非不能满足需求
     command; 执行shell命令
     read; 读取文本文件
     write; 写入文本文件

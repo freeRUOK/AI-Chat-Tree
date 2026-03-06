@@ -16,7 +16,8 @@ from config import Config
 from consts import ContentTag
 from application import Application
 from model import ModelResult
-from util import debug_logger, ImageHandler
+from util import ImageHandler
+from error_handling import debug_logger
 from text_to_speech import TextToSpeechOption
 
 

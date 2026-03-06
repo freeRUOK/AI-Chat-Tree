@@ -15,7 +15,7 @@ from consts import CONFIG_PATH, default_system_prompt, ContentTag
 from application import Application
 from ws_serve import WSServe
 from util import input_handler, clear_queue
-from util import DEBUG_MODE, debug_log
+from error_handling import DEBUG_MODE, debug_log
 from text_to_speech import TextToSpeechOption
 from data_status import DataStatus as CLIStatus
 

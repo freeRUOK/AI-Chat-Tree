@@ -9,7 +9,8 @@ import os
 import yaml
 from dotenv import load_dotenv
 from consts import CONFIG_PATH
-from util import read_file_text, debug_log, validate_values
+from util import read_file_text, validate_values
+from error_handling import debug_log
 
 load_dotenv(override=True)
 
