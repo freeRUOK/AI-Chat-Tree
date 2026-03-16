@@ -13,7 +13,7 @@ import importlib
 from pathlib import Path
 from pydantic import BaseModel
 from tools.result import Result
-from error_handling import debug_log
+from error_handling import emit_error
 
 
 class _ToolRegistry:
@@ -85,7 +85,7 @@ class _ToolRegistry:
         :return: 返回所有工具列表
         :rtype: list[dict]
         """
-        exclude_set = exclude or {}
+        exclude_set: set[str] = exclude or set()
         return [
             info["tool_def"]
             for name, info in self._tools.items()
@@ -120,6 +120,7 @@ class _ToolRegistry:
 
             return result
         except Exception as e:
+            emit_error(msg=str(e), exception=e)
             return Result(result={}, error=e)
 
     def _build_reminder(self, tool_name: str) -> str | None:

@@ -16,7 +16,7 @@ import simpleaudio as sa  # type: ignore
 from pydub import AudioSegment  # type: ignore
 from aiohttp.client_exceptions import WSServerHandshakeError as EdgeTTSServerError
 from util import clear_queue
-from error_handling import debug_log
+from error_handling import emit_error, Level
 
 
 class TextToSpeechOption(str, Enum):
@@ -84,7 +84,7 @@ class TextToSpeech(threading.Thread):
             playObj = waveObj.play()
             playObj.wait_done()
         except Exception as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
         finally:
             playObj.stop()
 
@@ -133,8 +133,8 @@ class TextToSpeech(threading.Thread):
         try:
             return asyncio.run(self._convert_async(text=text))
         except (edge_tts.exceptions.EdgeTTSException, EdgeTTSServerError) as e:
-            debug_log(e)
-            debug_log(ValueError(f"Error Text: {text}"))
+            emit_error(msg=str(e), exception=e, level=Level.WARN)
+            emit_error(msg=f"Error Text: {text}", level=Level.INFO)
         return None
 
     def run(self):
@@ -155,7 +155,7 @@ class TextToSpeech(threading.Thread):
 
         except Exception as e:
             print(f"tts Thread出现错误： {e}")
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
         finally:
             clear_queue(self._textQueue)
             audioQueue.put(None)

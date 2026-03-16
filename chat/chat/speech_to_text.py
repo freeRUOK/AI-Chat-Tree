@@ -11,7 +11,7 @@ import json
 import numpy as np
 import vosk  # type: ignore
 import sounddevice as sd  # type: ignore
-from error_handling import debug_log
+from error_handling import emit_error
 
 
 class SpeechToText(threading.Thread):
@@ -135,7 +135,7 @@ class SpeechToText(threading.Thread):
 
             self._last_result = self._recognize(audio_buffer=audio_buffer)
         except Exception as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
 
         if self.callback:
             self.callback(self._last_result)

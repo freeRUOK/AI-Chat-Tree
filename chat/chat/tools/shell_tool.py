@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 from tools.result import Result
 from tools import get_tool_registry
 from util import read_file_text
-from error_handling import DEBUG_MODE
+from error_handling import emit_error
 
 SHELL_BOX_DIR = "shell_box"
 DANGEROUS_PATTERNS = [
@@ -211,8 +211,7 @@ class ShellToolDispatcher:
             )
             return handler(paramms, cwd)
         except Exception as e:
-            if DEBUG_MODE:
-                raise e
+            emit_error(msg=str(e), exception=e)
 
             return Result(error=e, result={})
 
@@ -229,6 +228,9 @@ class ShellToolDispatcher:
         :return: 执行结果
         :rtype: Result
         """
+        if not p.command:
+            raise ValueError("必须提供command参数")
+
         lower_command = p.command.lower()
         if any(pattern in lower_command for pattern in DANGEROUS_PATTERNS):
             raise PermissionError("非法命令被阻断")
@@ -248,6 +250,7 @@ class ShellToolDispatcher:
         except subprocess.TimeoutExpired:
             result.error = TimeoutError(f"Shell Command Execute Timeout: {p.timeout}S.")
         except Exception as e:
+            emit_error(msg=str(e), exception=e)
             result.error = e
         finally:
             if process is not None:
@@ -264,9 +267,15 @@ class ShellToolDispatcher:
         """
         读取一个文本文件
         """
+        if not p.file_path:
+            raise ValueError("必须提供file_path参数")
+
         try:
             file_path = self._safe_path(cwd, p.file_path)
             content = read_file_text(str(file_path), require=True)
+            if not content:
+                raise ValueError("文件是空的")
+
             if p.limit or p.tail:
                 lines = content.splitlines()
                 if p.tail:
@@ -284,8 +293,8 @@ class ShellToolDispatcher:
         写入一个文本文件
         """
         try:
-            if p.content is None:
-                raise ValueError("Write 没有提供写入内容")
+            if p.content is None or p.file_path is None:
+                raise ValueError("Write 没有提供文件路径或者需要写入的内容")
 
             file_path = self._safe_path(cwd, p.file_path)
             file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -322,7 +331,7 @@ class ShellToolDispatcher:
                     {
                         "name": item.name,
                         "type": "directory" if item.is_dir() else "file",
-                        "size": item.st_size if item.is_file() else None,
+                        "size": stat.st_size if item.is_file() else None,
                         "modified": stat.st_mtime,
                     }
                 )
@@ -341,11 +350,14 @@ class ShellToolDispatcher:
         编辑文件（查找和替换
         """
         try:
-            if not p.old_string:
-                raise ValueError("old_string不能为空")
+            if p.file_path is None or p.old_string is None or p.new_string is None:
+                raise ValueError("必须提供参数file_path; old_string & new_string")
 
             file_path = self._safe_path(cwd, p.file_path)
             content = read_file_text(str(file_path), require=True)
+            if not content:
+                raise ValueError(f"文件： {p.file_path}是空文件")
+
             old_count = content.count(p.old_string)
             replace_count = old_count if p.replace_all else (1 if old_count > 0 else 0)
             new_content = content.replace(
@@ -371,8 +383,14 @@ class ShellToolDispatcher:
         在文件内搜索
         """
         try:
+            if p.file_path is None or p.pattern is None:
+                raise ValueError("必须提供参数： file_path & pattern")
+
             file_path = self._safe_path(cwd, p.file_path)
             content = read_file_text(str(file_path), require=True)
+            if content is None:
+                raise ValueError(f"文件： {p.file_path}是空白文件")
+
             lines = content.splitlines()
             pattern = re.compile(p.pattern, re.IGNORECASE)
             matches = []
@@ -407,6 +425,9 @@ class ShellToolDispatcher:
         获取目录或文件的属性
         """
         try:
+            if p.file_path is None:
+                raise ValueError("必须提供参数： file_path")
+
             file_path = self._safe_path(cwd, p.file_path)
             stat = file_path.stat()
             result = {

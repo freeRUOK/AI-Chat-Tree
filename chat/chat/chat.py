@@ -12,11 +12,11 @@ from datetime import datetime, timedelta
 import ollama
 from openai import APIStatusError, RateLimitError, APIConnectionError
 from httpx import ReadTimeout as OpenAIReadTimeout
-from model_tools import create_or_switch_model, ToolCallAccumulator
 from model import Model, ModelResult, ModelOutput
 from consts import ContentTag, _format, _has_image, _is_request
+from model_manager import get_model_manager
 from tool_call_looper import ToolCallLooper
-from error_handling import debug_log
+from error_handling import emit_error, handle_api_error
 
 
 class Chat:
@@ -28,7 +28,6 @@ class Chat:
         self,
         first_model: Model,
         model_output: ModelOutput,
-        models: list,
         second_model: Model | None = None,
         system_prompt: str = "你是一个乐于助人的AI助手， 性格和网络喷子差不多， 批评用户毫无手软， 不过说出的话总是让人发人深省",
         begin_callback: Callable[[], dict | None] | None = None,
@@ -39,7 +38,7 @@ class Chat:
         """
         self._first_model = first_model
         self._second_model = second_model
-        self._models = models
+        self._model_manager = get_model_manager()
         self._model = self._first_model
         self._begin_callback = begin_callback
         self._lock = threading.Lock()
@@ -60,7 +59,6 @@ class Chat:
         ]
         self._enable_tools = enable_tools
         self._tool_call_looper = ToolCallLooper(enable_tools=self._enable_tools)
-        self._tool_call_accumulator = ToolCallAccumulator()
 
     def _append_message(
         self, user_message: str, base64_image: str | None = None
@@ -131,8 +129,9 @@ class Chat:
                 APIConnectionError,
                 OpenAIReadTimeout,
                 ollama.ResponseError,
+                Exception,
             ) as e:
-                debug_log(e)
+                emit_error(msg=str(e), exception=e)
                 if not self._error_handler(e, call_count=i):
                     print("建议查看网络状态或查看配置是否异常。")
                     self._model = self._first_model
@@ -148,27 +147,15 @@ class Chat:
         返回True暂时故障，
         返回False不可恢复错误， 可能是程序bug或者配置错误
         """
+        is_retry = handle_api_error(
+            err=err,
+            call_count=call_count,
+            messages=self._messages,
+            output_done_callback=lambda: self._model_output.output_done([]),
+            pop_message=True,
+        )
 
-        err_code = -1
-        if isinstance(err, APIStatusError):
-            print(f"错误： {err.message}")
-            err_code = err.status_code
-        elif isinstance(err, OpenAIReadTimeout):
-            err_code = 600
-            print("读取超时")
-        elif isinstance(err, ollama.ResponseError):
-            print(f"错误： Error Code {err.status_code} {err}")
-            err_code = err.status_code
-        else:
-            print(f"错误： {err}")
-
-        if err_code >= 500 and call_count < 3:
-            return True
-
-        self._messages.pop(-1)
-        self._model_output.output_done([])
-
-        return False
+        return is_retry
 
     def _stream_handler(self, response) -> list:
         """
@@ -183,7 +170,7 @@ class Chat:
                 finish_reason = chunk.done_reason
 
             if delta.tool_calls is not None:
-                self._tool_call_accumulator.add_chunk(
+                self._model.tool_call_accumulator.add_chunk(
                     *delta.tool_calls, is_online=self._model.is_online
                 )
 
@@ -209,7 +196,7 @@ class Chat:
             if finish_reason == "stop":
                 self._chunk_completing_handler(last_chunk=chunk)
 
-        return self._tool_call_accumulator.all()
+        return self._model.tool_call_accumulator.all()
 
     def _delta_handler(self, delta) -> ModelResult:
         """
@@ -340,14 +327,13 @@ class Chat:
         切换模型
         """
         if self._first_model.current_model != first_model:
-            if new_model := create_or_switch_model(
-                model_list=self._models, model_name=first_model, model=self._first_model
+            if new_model := self._model_manager.create_or_switch(
+                model_name=first_model, model=self._first_model
             ):
                 self._first_model = new_model
 
         if self._second_model and self._second_model.current_model != second_model:
-            self._second_model = create_or_switch_model(
-                model_list=self._models,
+            self._second_model = self._model_manager.create_or_switch(
                 model_name=second_model,
                 model=self._second_model,
             )

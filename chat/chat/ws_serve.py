@@ -17,7 +17,7 @@ from consts import ContentTag
 from application import Application
 from model import ModelResult
 from util import ImageHandler
-from error_handling import debug_logger
+from error_handling import emit_error, Level
 from text_to_speech import TextToSpeechOption
 
 
@@ -89,14 +89,14 @@ class WSServe:
             socketio的connect事件
             """
             self.load_models_status()
-            debug_logger.info("Client connected")
+            emit_error(msg="Client connected", level=Level.INFO)
 
         @self.sio.on("chat")
         def handle_chat(message):
             """
             处理socketio的chat自定义事件
             """
-            debug_logger.info(f"Received message: {message}")
+            emit_error(msg=f"Received message: {message}", level=Level.INFO)
             msg = message.get("text", "简明扼要的描述一下这个图片")
             image_buf = message.get("image")
             if image_buf:
@@ -130,14 +130,14 @@ class WSServe:
                 if new_status["text_to_speech_option"]
                 else TextToSpeechOption.off
             )
-            debug_logger.info(f"Received New Status: {new_status}")
+            emit_error(msg=f"Received New Status: {new_status}", level=Level.INFO)
 
         @self.sio.on("disconnect")
         def handle_disconnect():
             """
             socketio disconnect事件
             """
-            debug_logger.info("Client disconnected")
+            emit_error(msg="Client disconnected", level=Level.INFO)
 
     def output_chunk(self, model_result: ModelResult):
         """

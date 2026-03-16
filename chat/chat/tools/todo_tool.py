@@ -120,6 +120,7 @@ def todo_write(p: TodoInputModel) -> Result:
     """
     todo_manager = get_todo_manager()
     try:
-        return Result(result=todo_manager.update(p.items))
+        todo_list_str = todo_manager.update(p.items)
+        return Result(result={"todo_list": todo_list_str})
     except Exception as e:
         return Result(error=e, result={})

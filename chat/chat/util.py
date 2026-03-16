@@ -19,7 +19,7 @@ import prompt_toolkit
 import pyperclip  # type: ignore
 import chardet
 from consts import ContentTag
-from error_handling import debug_log
+from error_handling import emit_error, Level
 
 
 def clear_queue(queue: Queue):
@@ -69,10 +69,9 @@ def read_file_text(filename: str, require: bool = False) -> str | None:
             raise ValueError(f"文件: {filename} 不是纯文本文件。")
 
     except (FileNotFoundError, PermissionError, ValueError) as e:
-        if require:
-            raise e
-
-        debug_log(e)
+        emit_error(
+            msg=str(e), exception=e, level=Level.FATAL if require else Level.WARN
+        )
 
         return None
 
@@ -192,7 +191,7 @@ class ImageHandler:
             base64_str = base64.b64encode(img_bytes).decode(encoding="UTF-8")
             return base64_str
         except Exception as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
 
         return None
 
@@ -207,7 +206,7 @@ class ImageHandler:
                 self._image = Image.open(image_data)
 
         except Exception as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
 
     def capture_screen(self, is_full_screen: bool = False):
         """
@@ -222,7 +221,7 @@ class ImageHandler:
 
             self._image = pyautogui.screenshot(region=region)
         except Exception as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
 
     def capture(self):
         """
@@ -241,4 +240,4 @@ class ImageHandler:
             capture.release()
 
         except ValueError as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)

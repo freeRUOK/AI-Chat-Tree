@@ -14,7 +14,8 @@ import ollama
 from openai import OpenAI
 from consts import ContentTag
 from util import validate_values
-from error_handling import debug_log
+from error_handling import emit_error
+from tools.tool_call_accumuator import ToolCallAccumulator
 from text_to_speech import TextToSpeech, TextToSpeechOption
 from config import Config
 
@@ -106,7 +107,8 @@ class Model:
         else:
             self._ollamaClient = ollama.Client(host=self.base_url)
 
-        self.tools = tools or []
+        self.tools = tools or None
+        self.tool_call_accumulator = ToolCallAccumulator()
 
     def chat(
         self, messages: list, tools: list[dict] | None = None, stream: bool = True
@@ -123,7 +125,7 @@ class Model:
                 model=self.current_model,
                 messages=messages,
                 tools=active_tools,  # type: ignore[arg-type]
-                parallel_tool_calls=True,
+                parallel_tool_calls=active_tools is not None,
                 stream=stream,
             )
         else:
@@ -134,8 +136,26 @@ class Model:
                 stream=stream,
             )
 
-    def response_handler(self, response: Any) -> list:
-        raise RuntimeError("默认处理函数没有实现")
+    def response_handler(
+        self, response: Any, messages: list, call_count: int = 0
+    ) -> list:
+        messages.append(
+            {
+                "role": "assistant",
+                "content": response.choices[0].message.content
+                if self.is_online
+                else response.message.content,
+            }
+        )
+        tool_calls = (
+            (response.choices[0].message.toolcalls or [])
+            if self.is_online
+            else (response.message.tool_calls or [])
+        )
+        for tc in tool_calls:
+            self.tool_call_accumulator.add_chunk(tc)
+
+        return self.tool_call_accumulator.all()
 
     def to_dict(
         self,
@@ -261,7 +281,7 @@ class ModelOutput:
             self._text_to_speech.start()
         except Exception as e:
             self._text_to_speech_option = TextToSpeechOption.off
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
             return None
 
     def output_done(self, messages: list):
@@ -287,7 +307,7 @@ class ModelOutput:
         try:
             (root_dir / Path(filename)).write_text(data=file_content, encoding="UTF-8")
         except Exception as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
 
     def trim(self, messages: list):
         """

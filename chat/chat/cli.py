@@ -5,6 +5,7 @@
 # * description: 一个简单的AI LLM聊天程序
 # 主要实现了cli接口
 import os
+import time
 import msvcrt
 from contextlib import ExitStack
 from typing_extensions import Annotated
@@ -13,9 +14,10 @@ import yaml
 from config import Config
 from consts import CONFIG_PATH, default_system_prompt, ContentTag
 from application import Application
+from gui import run_gui
 from ws_serve import WSServe
 from util import input_handler, clear_queue
-from error_handling import DEBUG_MODE, debug_log
+from error_handling import emit_error
 from text_to_speech import TextToSpeechOption
 from data_status import DataStatus as CLIStatus
 
@@ -83,6 +85,7 @@ def chat(
         str, typer.Option("--system-prompt", "-sp")
     ] = default_system_prompt,
 ):
+    start_time = time.time()
     status = CLIStatus()
     # 按照chat的默认方式运行
     application: Application | None = None
@@ -102,12 +105,36 @@ def chat(
                 )
             )
             application.start()
+            print(f"Start Time: {time.time() - start_time}")
             cli_input(application=application, status=status)
+
     except Exception as e:
         raise e
     finally:
         clear_queue(status.message_queue)
         print("下次再见！")
+
+
+@app.command()
+def gui(
+    model_name: Annotated[str, typer.Argument()] = "qwen3-vl-plus",
+    second_model_name: Annotated[str, typer.Argument()] = "qwen3.5:9b",
+    enable_tools: Annotated[bool, typer.Argument()] = False,
+):
+    """
+    启动GUI界面
+    :param model_name: 主要模型名称
+    :type model_name: Annotated[str, typer.Argument()]
+    :param second_model_name: 备用模型名称
+    :type second_model_name: Annotated[str, typer.Argument()]
+    :param enable_tools: 是否启用工具调用
+    :type enable_tools: Annotated[bool, typer.Argument()]
+    """
+    run_gui(
+        model_name=model_name,
+        second_model_name=second_model_name,
+        enable_tools=enable_tools,
+    )
 
 
 @config_app.command("tts")
@@ -169,8 +196,4 @@ def serve(port: Annotated[int, typer.Argument()] = 8001):
         with WSServe() as ws_serve:
             ws_serve.run(port=port)
     except Exception as e:
-        debug_log(e)
-        if DEBUG_MODE:
-            raise e
-        else:
-            print(f"错误： {e}")
+        emit_error(msg=str(e), exception=e)

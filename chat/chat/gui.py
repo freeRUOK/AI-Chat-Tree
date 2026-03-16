@@ -20,6 +20,7 @@ from util import clear_queue, ImageHandler
 from gui_consts import MENU_ITEM_SET_FIRST_MODEL, MENU_ITEM_SET_SECOND_MODEL
 from data_status import DataStatus as FrameStatus
 from text_to_speech import TextToSpeechOption
+from error_handling import Error, Level
 
 
 class MainFrame(wx.Frame):
@@ -219,9 +220,16 @@ class MainFrame(wx.Frame):
         elif menu_id == wx.ID_ABOUT:
             wx.MessageBox("版权所有 2025 FreeRUOK")
 
-    def on_error(self, exc: Exception, is_fail: bool):
-        wx.MessageBox(str(exc), "出错了", wx.ICON_ERROR)
-        if is_fail:
+    def on_error(self, err: Error):
+        """
+        错误处理回调函数
+        :param err: 错误信息
+        :type err: Error
+        """
+        if err.level in [Level.ERROR, Level.FATAL]:
+            wx.MessageBox(str(err), "出错了", wx.ICON_ERROR)
+
+        if err.level == Level.FATAL:
             wx.CallAfter(self.Close)
 
     def set_window_title(
@@ -476,7 +484,19 @@ class MainFrame(wx.Frame):
         event.Skip()
 
 
-if __name__ == "__main__":
+def run_gui(
+    model_name: str = "qwen3-vl-plus",
+    second_model_name: str = "qwen3.5:9b",
+    enable_tools: bool = False,
+):
+    """
+    启动GUI界面
+    :param model_name: 主要模型名称
+    :type model_name: str
+    :param second_model_name: 备用模型名称
+    :type second_model_name: str
+    :param : enable_tools : 是否启用工具调用
+    """
     app = wx.App()
     with ExitStack() as stack:
         config = stack.enter_context(Config())
@@ -486,8 +506,8 @@ if __name__ == "__main__":
         application = stack.enter_context(
             Application(
                 config=config,
-                model_name="gemma3:27b",
-                second_model_name="deepseek-chat",
+                model_name=model_name,
+                second_model_name=second_model_name,
                 text_to_speech_option=TextToSpeechOption.play,
                 error_callback=frame.on_error,
                 begin_callback=frame.status.on_begin,
@@ -495,7 +515,7 @@ if __name__ == "__main__":
                 chunk_callback=frame.on_chunk,
                 finish_callback=frame.on_finish,
                 voice_input_callback=frame.status.on_speech_result,
-                enable_tools=False,
+                enable_tools=enable_tools,
             )
         )
 
@@ -508,3 +528,7 @@ if __name__ == "__main__":
         if threading.active_count() > 1:
             clear_queue(frame.status.message_queue)
             application.join()
+
+
+if __name__ == "__main__":
+    run_gui()

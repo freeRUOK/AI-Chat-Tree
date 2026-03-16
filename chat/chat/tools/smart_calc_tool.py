@@ -11,15 +11,15 @@ SmartCalc - 智能计算工具
 from typing import Literal
 from datetime import datetime
 from pydantic import BaseModel, Field
-from simpleeval import simple_eval
-from lunar_python import Lunar, Solar
-import chinese_calendar as calendar
+from simpleeval import simple_eval  # type: ignore
+from lunar_python import Lunar, Solar  # type: ignore
+import chinese_calendar as calendar  # type: ignore
 from pint import UnitRegistry
 from tools import get_tool_registry
 from tools.result import Result
 
 registry = get_tool_registry()
-ureg = UnitRegistry()
+ureg: UnitRegistry = UnitRegistry()
 
 
 class SmartInput(BaseModel):

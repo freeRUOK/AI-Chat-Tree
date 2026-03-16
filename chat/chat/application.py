@@ -8,13 +8,12 @@
 from io import BytesIO
 from typing import Callable
 import threading
-import ollama
 from config import Config
 from consts import default_system_prompt, ContentTag
 from chat import Chat
-from model import ModelOutput, Model, ModelResult, ModelInfo
-from model_tools import create_or_switch_model
-from error_handling import debug_log, DEBUG_MODE
+from model import ModelOutput, ModelResult, ModelInfo
+from model_manager import get_model_manager
+from error_handling import emit_error, set_error_handler, Error
 from text_to_speech import TextToSpeechOption
 from voice_input_manager import VoiceInputManager
 
@@ -31,7 +30,13 @@ class Application(threading.Thread):
         second_model_name: str = "deepseek-r1:14b",
         system_prompt: str = default_system_prompt,
         text_to_speech_option: TextToSpeechOption = TextToSpeechOption.off,
-        error_callback: Callable[[Exception, bool], None] | None = None,
+        error_callback: Callable[
+            [
+                Error,
+            ],
+            None,
+        ]
+        | None = None,
         begin_callback: Callable[[], dict | None] | None = None,
         input_callback: Callable[[], tuple[str, str | None]] | None = None,
         chunk_callback: Callable[[ModelResult], None] | None = None,
@@ -49,7 +54,7 @@ class Application(threading.Thread):
         self._second_model_name = second_model_name
         self._system_prompt = system_prompt
         self._text_to_speech_option = text_to_speech_option
-        self._error_callback = error_callback
+        set_error_handler(on_error=error_callback)
         self._begin_callback = begin_callback
         self._input_callback = input_callback
         self._chunk_callback = chunk_callback
@@ -57,7 +62,7 @@ class Application(threading.Thread):
         self._finish_callback = finish_callback
         self._lock = threading.Lock()
 
-        self._models = self.load_models()
+        self._model_manager = get_model_manager(config=self._config)
         self._chat: Chat
         self._is_begin = False
         self.voice_input_manager = VoiceInputManager(
@@ -79,7 +84,7 @@ class Application(threading.Thread):
         """
         self.voice_input_manager.stop()
         if exc_type:
-            debug_log(exc_val)
+            emit_error(msg=str(exc_val), exception=exc_val)
 
     def get_model_info(self, content_tag: ContentTag) -> ModelInfo:
         """
@@ -103,7 +108,7 @@ class Application(threading.Thread):
                             sub_model,
                             model["is_online"],
                         )
-                        for model in self._models
+                        for model in self._model_manager.copy_models()
                         for sub_model in model["sub_models"]
                     ]
                     return ModelInfo(
@@ -130,24 +135,18 @@ class Application(threading.Thread):
         # 很多时候不会真正运行模型， 仅仅是查看相关配置信息
         """
         try:
-            first_model, second_model = self.build_model(
+            first_model, second_model = self._model_manager.build_model(
                 first_model_name=first_model_name, second_model_name=second_model_name
             )
 
             self._is_begin = True
         except ValueError as e:
-            if self._error_callback:
-                self._error_callback(e, True)
-            else:
-                print(f"错误： {e}")
-
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
             return
 
         self._chat = Chat(
             first_model=first_model,
             model_output=model_output,
-            models=self._models,
             second_model=second_model,
             system_prompt=system_prompt,
             begin_callback=self._begin_callback,
@@ -177,89 +176,4 @@ class Application(threading.Thread):
 
                 self._chat.run(input_callback=self._input_callback)
         except Exception as e:
-            debug_log(e)
-            if DEBUG_MODE:
-                raise e
-            else:
-                if self._error_callback:
-                    self._error_callback(e, True)
-                else:
-                    print(f"错误： {e}")
-
-    def _load_ollama_models(self, is_online: bool) -> dict:
-        """
-        获取ollama提供的所有可用的模型
-        如果 is_online == True 则尝试获取ollama云端模型
-        """
-        if is_online:
-            ollama_host = "https://ollama.com"
-        elif host := self._config.get("usage.ollama_host"):
-            ollama_host = host
-        else:
-            ollama_host = "http://127.0.0.1:11434"
-        ollama_models = {
-            "group_name": "ollama_local" if is_online else "ollama_cloud",
-            "show_reasoning": True,
-            "is_online": is_online,
-            "base_url": ollama_host,
-            "api_key": self._config.get("usage.ollama_api_key"),
-        }
-        try:
-            # ollama没有运行或者没有安装， 所以这里需要提醒用户
-            ollama_sub_models = [
-                f"{item.model}{'-cloud' if is_online else ''}"
-                for item in ollama.Client(host=ollama_host).list().models
-                if item.model and "cloud" not in item.model
-            ]
-        except ollama.ResponseError as e:
-            ollama_sub_models = []
-            debug_log(e)
-            error_prompt = "加载ollama模型失败， 请检查ollama服务是否正在运行或者建议安装配置ollama服务。。"
-            if self._error_callback:
-                self._error_callback(ValueError(error_prompt), False)
-            else:
-                print(error_prompt)
-
-        if ollama_sub_models:
-            ollama_models["sub_models"] = ollama_sub_models
-        else:
-            ollama_models = {}
-
-        return ollama_models
-
-    def load_models(self) -> list:
-        """
-        获取配置文件里的和本地ollama的模型元数据
-        :param self: Description
-        :return: 返回所有的ollama模型
-        :rtype: list
-        """
-        models = []
-        if result := self._config.get("models"):
-            models = result
-
-        models.append(self._load_ollama_models(is_online=True))
-        models.append(self._load_ollama_models(is_online=False))
-
-        return models
-
-    def build_model(
-        self, first_model_name: str, second_model_name: str | None
-    ) -> tuple[Model, Model | None]:
-        """
-        通过sub_model_name查询创建主要模型和备用模型
-        # 真正加载模型， 必须有一个主要模型， 备用模型可选
-        # 如果主要模型出现问题就切换到备用模型
-        """
-        if len(self._models) == 0:
-            raise ValueError("没有可用的模型, 请安装ollama或者添加在线模型。")
-
-        first_model = create_or_switch_model(self._models, first_model_name)
-        second_model = create_or_switch_model(self._models, second_model_name)
-        if first_model is None:
-            raise ValueError(f"没有找到子模型： {first_model_name}")
-
-        return (
-            first_model,
-            second_model,
-        )
+            emit_error(msg=str(e), exception=e)

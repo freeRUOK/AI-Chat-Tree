@@ -10,7 +10,7 @@ from queue import Queue
 import threading
 import simpleaudio as sa  # type: ignore
 from util import clear_queue
-from error_handling import debug_log
+from error_handling import emit_error
 
 
 class PlayMode(str, Enum):
@@ -48,7 +48,7 @@ class _SoundPlayer(threading.Thread):
                 if path.is_file()
             }
         except Exception as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
 
     def play(self, name: str, play_mode: PlayMode):
         """
@@ -76,7 +76,7 @@ class _SoundPlayer(threading.Thread):
                 if self.play_object:
                     self.play_object.stop()
             except Exception as e:
-                debug_log(e)
+                emit_error(msg=str(e), exception=e)
 
     def stop_play(self):
         """
@@ -112,7 +112,7 @@ class _SoundPlayer(threading.Thread):
                     self.play_object.wait_done()
 
             except Exception as e:
-                debug_log(e)
+                emit_error(msg=str(e), exception=e)
                 continue
 
         clear_queue(self.queue)

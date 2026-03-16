@@ -5,7 +5,7 @@
 # * description: 一个简单的AI LLM聊天程序
 # 实现一个主Agent和子Agent共用的工具调用循环
 from typing import Callable
-from error_handling import DEBUG_MODE, debug_log
+from error_handling import emit_error
 
 from tools import get_tool_registry
 from model import Model
@@ -50,7 +50,7 @@ class ToolCallLooper:
             if stream_handler is not None:
                 pending_calls = stream_handler(response)
             else:
-                pending_calls = model.response_handler(response)
+                pending_calls = model.response_handler(response, messages=messages)
 
             if not pending_calls:
                 break
@@ -85,8 +85,8 @@ class ToolCallLooper:
                 name=tc["name"], arguments=tc["arguments"]
             )
             print(f"Tool Calling: {tc['name']} Done. Return Result: {result}")
-            if DEBUG_MODE and result.error:
-                debug_log(result.error)
+            if result.error:
+                emit_error(msg=str(result.error), exception=result.error)
 
             tool_results.append({"tool_call": tc, "result": result})
 

@@ -10,7 +10,7 @@ import yaml
 from dotenv import load_dotenv
 from consts import CONFIG_PATH
 from util import read_file_text, validate_values
-from error_handling import debug_log
+from error_handling import emit_error
 
 load_dotenv(override=True)
 
@@ -35,7 +35,7 @@ class Config:
                 self._config = yaml.safe_load(yml_data)
                 self._find_env_value(self._config)
         except (yaml.error.YAMLError, FileNotFoundError, PermissionError) as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
             if not self._build_empty:
                 print(f"致命错误： {e}\n详细信息参考启用调试模式之后输出的日志文件。")
                 exit(-1)
@@ -65,7 +65,7 @@ class Config:
                 self._is_change = False
                 return True
         except PermissionError as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
         return False
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -114,7 +114,7 @@ class Config:
             item, name = self._path(path=path)
             return item[name]
         except (TypeError, ValueError) as e:
-            debug_log(e)
+            emit_error(msg=str(e), exception=e)
             if isinstance(e, TypeError):
                 print(f"yml配置文件可能有语法错误\n请检查{path}字段")
 
